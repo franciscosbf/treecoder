@@ -1,0 +1,6 @@
+#pragma once
+
+#include <string>
+
+const std::string PROGRAM_NAME = "@PROJECT_NAME@";
+const std::string PROGRAM_VERSION = "@PROJECT_VERSION@";

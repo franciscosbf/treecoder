@@ -1,0 +1,12 @@
+namespace prefixtable;
+
+table PrefixEntry {
+  byte:ubyte;
+  frequency:uint64;
+}
+
+table PrefixTable {
+  entries:[PrefixEntry];
+}
+
+root_type PrefixTable;
