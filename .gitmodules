@@ -1,0 +1,3 @@
+[submodule "deps/endian"]
+	path = deps/endian
+	url = git@github.com:steinwurf/endian.git
