@@ -1,11 +1,13 @@
 #include <bitset>
 #include <cstdint>
+#include <cstring>
 #include <gtest/gtest.h>
 #include <memory>
 #include <unordered_map>
 #include <vector>
 
 #include "endian/big_endian.hpp"
+#include "openssl/sha.h"
 #include "prefixtable_generated.h"
 #include "treecoder.hpp"
 
@@ -179,19 +181,41 @@ TEST(EncodePrefixTableAndInputTest, PopulatedTable) {
   std::string sin = "AAABCCBCCDDDEEFDDFDF";
   std::vector<std::uint8_t> in(sin.begin(), sin.end());
 
-  std::vector<std::uint8_t> expected_out = {0b11011011, 0b00100000, 0b01000001,
-                                            0b01010011, 0b01111110, 0b10111101,
-                                            0b11000000};
+  std::vector<std::uint8_t> expected_compressed_out = {
+      0b11011011, 0b00100000, 0b01000001, 0b01010011,
+      0b01111110, 0b10111101, 0b11000000};
+
+  std::uint8_t expected_out_hash[SHA256_DIGEST_LENGTH];
 
   auto out = encodePrefixTableAndInput(table, in);
 
   std::uint32_t table_buff_sz;
-  ASSERT_TRUE(out.size() >= sizeof table_buff_sz);
-  big_endian::get<std::uint32_t>(table_buff_sz, &out[0]);
+  std::uint32_t encoded_compressed_in_sz;
 
-  ASSERT_TRUE(out.size() - sizeof table_buff_sz ==
-              table_buff_sz + expected_out.size());
-  auto prefix_table = GetPrefixTable(&out[0] + sizeof table_buff_sz);
+  ASSERT_TRUE(out.getSize() >= sizeof expected_out_hash + sizeof table_buff_sz +
+                                   sizeof encoded_compressed_in_sz);
+
+  big_endian::get<std::uint32_t>(table_buff_sz,
+                                 out.getData() + sizeof expected_out_hash);
+
+  big_endian::get<std::uint32_t>(encoded_compressed_in_sz,
+                                 out.getData() + sizeof expected_out_hash +
+                                     sizeof table_buff_sz);
+
+  ASSERT_TRUE(out.getSize() - sizeof expected_out_hash - sizeof table_buff_sz -
+                  sizeof encoded_compressed_in_sz ==
+              table_buff_sz + expected_compressed_out.size());
+
+  SHA256(out.getData() + sizeof expected_out_hash,
+         out.getSize() - sizeof expected_out_hash, expected_out_hash);
+  ASSERT_EQ(
+      std::memcmp(out.getData(), expected_out_hash, sizeof expected_out_hash),
+      0);
+  ;
+
+  auto prefix_table =
+      GetPrefixTable(out.getData() + sizeof expected_out_hash +
+                     sizeof table_buff_sz + sizeof encoded_compressed_in_sz);
   ASSERT_EQ(prefix_table->entries()->size(), table.size());
   for (auto prefix_entry : *prefix_table->entries()) {
     auto entry = table.find(prefix_entry->byte());
@@ -199,10 +223,11 @@ TEST(EncodePrefixTableAndInputTest, PopulatedTable) {
     ASSERT_EQ(prefix_entry->frequency(), entry->second.getFrequency());
   }
 
-  for (auto i = 0; i < expected_out.size(); i++) {
+  for (auto i = 0; i < expected_compressed_out.size(); i++) {
     auto got_byte = std::bitset<BITS_IN_BYTE>{
-        out[i + sizeof table_buff_sz + table_buff_sz]};
-    auto expected_byte = std::bitset<BITS_IN_BYTE>{expected_out[i]};
+        out.getData()[i + sizeof expected_out_hash + sizeof table_buff_sz +
+                      sizeof encoded_compressed_in_sz + table_buff_sz]};
+    auto expected_byte = std::bitset<BITS_IN_BYTE>{expected_compressed_out[i]};
     ASSERT_EQ(got_byte, expected_byte);
   }
 }

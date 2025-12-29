@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
 
   bool to_decode = wants_to_decode(ifilename);
   std::string ofilename;
-  std::vector<std::uint8_t> ocontent;
+  Output ocontent;
   TreeCoder tc;
   std::function<void()> treecode;
 

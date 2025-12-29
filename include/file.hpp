@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <string>
@@ -21,6 +20,23 @@ public:
   std::vector<std::uint8_t> read();
 };
 
+class Output {
+private:
+  std::uint8_t *data;
+  std::uint32_t size;
+
+public:
+  Output();
+
+  Output(std::uint8_t *data, std::uint32_t size);
+
+  ~Output();
+
+  const std::uint8_t *getData() const;
+
+  std::uint32_t getSize() const;
+};
+
 class OutputFile {
 private:
   std::ofstream ostream;
@@ -30,6 +46,6 @@ public:
 
   ~OutputFile();
 
-  void write(const std::vector<std::uint8_t> &content);
+  void write(const Output &out);
 };
 } // namespace file

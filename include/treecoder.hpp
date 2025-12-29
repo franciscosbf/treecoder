@@ -7,7 +7,11 @@
 #include <unordered_map>
 #include <vector>
 
+#include "file.hpp"
+
 #define BITS_IN_BYTE 8
+
+using namespace file;
 
 namespace treecoder {
 
@@ -118,12 +122,12 @@ void computePrefixCodePerByte(
 std::unordered_map<std::uint8_t, PrefixCodeEntry>
 computePrefixCodeTable(const std::shared_ptr<HuffmanTree> tree);
 
-std::vector<std::uint8_t> encodePrefixTableAndInput(
+// WARN: assumes that the number of prefixes is equal to the number of in bytes
+Output encodePrefixTableAndInput(
     const std::unordered_map<std::uint8_t, PrefixCodeEntry> &table,
     const std::vector<std::uint8_t> &in);
 
-std::vector<std::uint8_t>
-decodePrefixTableAndInput(const std::vector<std::uint8_t> &in);
+Output decodePrefixTableAndInput(const std::vector<std::uint8_t> &in);
 
 class TreeCoder {
 public:
@@ -131,8 +135,8 @@ public:
 
   ~TreeCoder();
 
-  std::vector<std::uint8_t> encode(const std::vector<std::uint8_t> &in);
+  Output encode(const std::vector<std::uint8_t> &in);
 
-  std::vector<std::uint8_t> decode(const std::vector<std::uint8_t> &in);
+  Output decode(const std::vector<std::uint8_t> &in);
 };
 } // namespace treecoder

@@ -44,6 +44,8 @@ FetchContent_MakeAvailable(flatbuffers)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/deps/endian endian)
 
+find_package(OpenSSL 3.6 REQUIRED)
+
 # Define project executable
 
 add_executable(${PROJECT_NAME}
@@ -62,6 +64,7 @@ target_link_libraries(${PROJECT_NAME}
   argparse
   flatbuffers
   steinwurf::endian
+  OpenSSL::SSL
 )
 
 # Define tests
@@ -73,12 +76,14 @@ set(TREECODER_TEST treecoder_test)
 add_executable(${TREECODER_TEST}
   test/treecoder_test.cpp
   src/treecoder.cpp
+  src/file.cpp
 )
 
 target_link_libraries(${TREECODER_TEST}
   GTest::gtest_main
   flatbuffers
   steinwurf::endian
+  OpenSSL::SSL
 )
 
 include(GoogleTest)

@@ -25,6 +25,17 @@ std::vector<std::uint8_t> InputFile::read() {
   return content;
 }
 
+Output::Output() : data(nullptr), size(0) {}
+
+Output::Output(std::uint8_t *data, std::uint32_t size)
+    : data(data), size(size) {}
+
+Output::~Output() { delete[] data; }
+
+const std::uint8_t *Output::getData() const { return data; }
+
+std::uint32_t Output::getSize() const { return size; }
+
 OutputFile::OutputFile(const std::string &filename) {
   ostream.open(filename, std::ofstream::out | std::ofstream::binary |
                              std::ofstream::trunc);
@@ -35,7 +46,7 @@ OutputFile::~OutputFile() {
     ostream.close();
 }
 
-void OutputFile::write(const std::vector<std::uint8_t> &content) {
-  ostream.write(reinterpret_cast<const char *>(content.data()), content.size());
+void OutputFile::write(const Output &out) {
+  ostream.write(reinterpret_cast<const char *>(out.getData()), out.getSize());
 }
 } // namespace file

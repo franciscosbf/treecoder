@@ -1,9 +1,11 @@
 #include <cassert>
 #include <cmath>
+#include <cstring>
 #include <memory>
 #include <queue>
 
 #include "endian/big_endian.hpp"
+#include "openssl/sha.h"
 #include "prefixtable_generated.h"
 #include "treecoder.hpp"
 
@@ -161,7 +163,7 @@ computePrefixCodeTable(const std::shared_ptr<HuffmanTree> tree) {
   return table;
 }
 
-std::vector<std::uint8_t> encodePrefixTableAndInput(
+Output encodePrefixTableAndInput(
     const std::unordered_map<std::uint8_t, PrefixCodeEntry> &table,
     const std::vector<std::uint8_t> &in) {
   FlatBufferBuilder builder;
@@ -184,19 +186,25 @@ std::vector<std::uint8_t> encodePrefixTableAndInput(
   std::uint32_t table_buff_sz = builder.GetSize();
   auto table_buff = builder.GetBufferPointer();
 
-  auto compressed_content_sz = static_cast<std::uint32_t>(
+  auto compressed_in_sz = static_cast<std::uint32_t>(
       std::ceil(compressed_content_bits_sz / static_cast<float>(BITS_IN_BYTE)));
 
-  std::vector<std::uint8_t> out;
+  std::uint32_t out_sz = SHA256_DIGEST_LENGTH + sizeof table_buff_sz +
+                         sizeof compressed_in_sz + table_buff_sz +
+                         compressed_in_sz;
+  auto out_data = new std::uint8_t[out_sz];
 
-  out.reserve(sizeof(std::uint32_t) + table_buff_sz + compressed_content_sz);
+  auto encoded_table_sz = out_data + SHA256_DIGEST_LENGTH;
+  big_endian::put<std::uint32_t>(table_buff_sz, encoded_table_sz);
 
-  std::uint8_t raw_table_buff_sz[sizeof(std::uint32_t)];
-  big_endian::put<std::uint32_t>(table_buff_sz, raw_table_buff_sz);
-  out.insert(out.begin(), raw_table_buff_sz,
-             raw_table_buff_sz + sizeof raw_table_buff_sz);
-  out.insert(out.end(), table_buff, table_buff + table_buff_sz);
+  auto encoded_compressed_in_sz = encoded_table_sz + sizeof table_buff_sz;
+  big_endian::put<std::uint32_t>(compressed_in_sz, encoded_compressed_in_sz);
 
+  auto encoded_table = encoded_compressed_in_sz + sizeof compressed_in_sz;
+  std::memcpy(encoded_table, table_buff, table_buff_sz);
+
+  auto compressed_in = encoded_table + table_buff_sz;
+  std::uint32_t current_byte_index = 0;
   std::uint8_t byte_index = 0;
   for (auto byte : in) {
     auto prefix_entry = table.find(byte);
@@ -208,27 +216,38 @@ std::vector<std::uint8_t> encodePrefixTableAndInput(
 
     if (bits <= free_byte_indexes) {
       if (byte_index == 0)
-        out.push_back(code << (BITS_IN_BYTE - bits));
+        compressed_in[current_byte_index] = code << (BITS_IN_BYTE - bits);
       else
-        out.back() |= code << (BITS_IN_BYTE - byte_index - bits);
+        compressed_in[current_byte_index] |=
+            code << (BITS_IN_BYTE - byte_index - bits);
       byte_index += bits;
     } else {
       std::uint8_t remaining = bits - free_byte_indexes;
-      out.back() |= code >> remaining;
-      out.push_back((code & ~(~0 << remaining)) << (BITS_IN_BYTE - remaining));
+      compressed_in[current_byte_index] |= code >> remaining;
+      current_byte_index++;
+      compressed_in[current_byte_index] = (code & ~(~0 << remaining))
+                                          << (BITS_IN_BYTE - remaining);
       byte_index = remaining;
     }
 
-    if (byte_index == BITS_IN_BYTE)
+    if (byte_index == BITS_IN_BYTE) {
       byte_index = 0;
+      current_byte_index++;
+    }
   }
 
-  return out;
+  auto hash_digest = out_data;
+  SHA256(out_data + SHA256_DIGEST_LENGTH, out_sz - SHA256_DIGEST_LENGTH,
+         hash_digest);
+
+  return Output(out_data, out_sz);
 }
 
-std::vector<std::uint8_t>
-decodePrefixTableAndInput(const std::vector<std::uint8_t> &in) {
-  std::vector<std::uint8_t> out;
+Output decodePrefixTableAndInput(const std::vector<std::uint8_t> &in) {
+  Output out;
+
+  if (in.empty())
+    throw TreeCoderError("file is empty");
 
   // TODO: implement
 
@@ -241,8 +260,7 @@ TreeCoder::TreeCoder() {}
 
 TreeCoder::~TreeCoder() {}
 
-std::vector<std::uint8_t>
-TreeCoder::encode(const std::vector<std::uint8_t> &in) {
+Output TreeCoder::encode(const std::vector<std::uint8_t> &in) {
   auto frequencies = computeFrequencyTable(in);
 
   if (frequencies.empty())
@@ -255,8 +273,7 @@ TreeCoder::encode(const std::vector<std::uint8_t> &in) {
   return encodePrefixTableAndInput(table, in);
 }
 
-std::vector<std::uint8_t>
-TreeCoder::decode(const std::vector<std::uint8_t> &in) {
+Output TreeCoder::decode(const std::vector<std::uint8_t> &in) {
   return decodePrefixTableAndInput(in);
 }
 } // namespace treecoder
