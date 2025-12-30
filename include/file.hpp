@@ -3,9 +3,35 @@
 #include <cstdint>
 #include <fstream>
 #include <string>
-#include <vector>
 
 namespace file {
+class Container {
+protected:
+  std::uint8_t *data;
+  std::uint32_t size;
+
+  Container();
+
+  Container(std::uint8_t *data, std::uint32_t size);
+
+public:
+  virtual ~Container();
+
+  const std::uint8_t *getData() const;
+
+  std::uint32_t getSize() const;
+};
+
+class InputContainer final : public Container {
+public:
+  InputContainer();
+
+  InputContainer(std::uint8_t *data, std::uint32_t size);
+
+  ~InputContainer();
+
+  std::uint32_t isEmpty() const;
+};
 
 class InputFile {
 private:
@@ -17,24 +43,16 @@ public:
 
   ~InputFile();
 
-  std::vector<std::uint8_t> read();
+  InputContainer read();
 };
 
-class Output {
-private:
-  std::uint8_t *data;
-  std::uint32_t size;
-
+class OutputContainer final : public Container {
 public:
-  Output();
+  OutputContainer();
 
-  Output(std::uint8_t *data, std::uint32_t size);
+  OutputContainer(std::uint8_t *data, std::uint32_t size);
 
-  ~Output();
-
-  const std::uint8_t *getData() const;
-
-  std::uint32_t getSize() const;
+  ~OutputContainer();
 };
 
 class OutputFile {
@@ -46,6 +64,6 @@ public:
 
   ~OutputFile();
 
-  void write(const Output &out);
+  void write(const OutputContainer &out);
 };
 } // namespace file

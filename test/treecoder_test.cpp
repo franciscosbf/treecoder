@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "endian/big_endian.hpp"
+#include "file.hpp"
 #include "openssl/sha.h"
 #include "prefixtable_generated.h"
 #include "treecoder.hpp"
@@ -17,17 +18,19 @@ using namespace prefixtable;
 using namespace endian;
 
 TEST(FrequencyTableTest, EmptyTable) {
-  std::vector<std::uint8_t> bytes;
+  InputContainer in;
 
-  auto frequencies = computeFrequencyTable(bytes);
+  auto frequencies = computeFrequencyTable(in);
 
   ASSERT_EQ(frequencies.size(), 0);
 }
 
 TEST(FrequencyTableTest, PopulatedTable) {
-  std::vector<std::uint8_t> bytes = {'a', 'a', 'b', 'a'};
+  auto data = new std::uint8_t[4];
+  std::memcpy(data, "aaba", 4);
+  InputContainer in(data, 4);
 
-  auto frequencies = computeFrequencyTable(bytes);
+  auto frequencies = computeFrequencyTable(in);
 
   ASSERT_EQ(frequencies.size(), 2);
 
@@ -178,8 +181,9 @@ TEST(EncodePrefixTableAndInputTest, PopulatedTable) {
       {'A', {3, 0b110, 3}}, {'B', {2, 0b010, 3}}, {'C', {4, 0b00, 2}},
       {'D', {6, 0b10, 2}},  {'E', {2, 0b011, 3}}, {'F', {3, 0b111, 3}}};
 
-  std::string sin = "AAABCCBCCDDDEEFDDFDF";
-  std::vector<std::uint8_t> in(sin.begin(), sin.end());
+  auto data = new std::uint8_t[20];
+  std::memcpy(data, "AAABCCBCCDDDEEFDDFDF", 20);
+  InputContainer in(data, 20);
 
   std::vector<std::uint8_t> expected_compressed_out = {
       0b11011011, 0b00100000, 0b01000001, 0b01010011,
@@ -236,8 +240,9 @@ TEST(EncodePrefixTableAndInputTest, DoNotAcceptCodeWithMoreThan8Bits) {
   std::unordered_map<std::uint8_t, PrefixCodeEntry> table = {
       {'A', {3, 0b110, 9}}};
 
-  std::string sin = "AAA";
-  std::vector<std::uint8_t> in(sin.begin(), sin.end());
+  auto data = new std::uint8_t[3];
+  std::memcpy(data, "AAA", 3);
+  InputContainer in(data, 3);
 
   ASSERT_DEATH(
       { encodePrefixTableAndInput(table, in); },
@@ -246,7 +251,7 @@ TEST(EncodePrefixTableAndInputTest, DoNotAcceptCodeWithMoreThan8Bits) {
 
 TEST(EncodeTest, EmptyInput) {
   TreeCoder tc;
-  std::vector<std::uint8_t> in;
+  InputContainer in;
 
   ASSERT_THROW({ tc.encode(in); }, TreeCoderError);
 }

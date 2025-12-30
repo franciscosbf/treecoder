@@ -5,7 +5,6 @@
 #include <functional>
 #include <iostream>
 #include <string>
-#include <vector>
 
 #include "file.hpp"
 #include "treecoder.hpp"
@@ -38,11 +37,11 @@ int main(int argc, char **argv) {
   }
 
   const std::string ifilename = program.get("file");
-  std::vector<std::uint8_t> icontent;
+  InputContainer input;
 
   try {
     InputFile ifile(ifilename);
-    icontent = ifile.read();
+    input = ifile.read();
   } catch (const std::exception &e) {
     std::cerr << "While reading input file " << ifilename << ": " << e.what()
               << std::endl;
@@ -52,18 +51,18 @@ int main(int argc, char **argv) {
 
   bool to_decode = wants_to_decode(ifilename);
   std::string ofilename;
-  Output ocontent;
+  OutputContainer output;
   TreeCoder tc;
   std::function<void()> treecode;
 
   if (to_decode) {
     ofilename = ifilename.substr(ifilename.size() - HUFFMAN_SUFFIX.size());
 
-    treecode = [&]() { ocontent = tc.decode(icontent); };
+    treecode = [&]() { output = tc.decode(input); };
   } else {
     ofilename = ifilename + HUFFMAN_SUFFIX;
 
-    treecode = [&]() { ocontent = tc.encode(icontent); };
+    treecode = [&]() { output = tc.encode(input); };
   }
 
   try {
@@ -77,7 +76,7 @@ int main(int argc, char **argv) {
 
   try {
     OutputFile ofile(ofilename);
-    ofile.write(ocontent);
+    ofile.write(output);
   } catch (const std::exception &e) {
     std::cerr << "While writing output file " << ifilename << ": " << e.what();
   }

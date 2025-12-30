@@ -5,6 +5,7 @@
 #include <queue>
 
 #include "endian/big_endian.hpp"
+#include "file.hpp"
 #include "openssl/sha.h"
 #include "prefixtable_generated.h"
 #include "treecoder.hpp"
@@ -98,14 +99,15 @@ std::shared_ptr<HuffmanTree> HuffmanTree::build(
 HuffmanTree::~HuffmanTree() {}
 
 std::unordered_map<std::uint8_t, std::size_t>
-computeFrequencyTable(const std::vector<std::uint8_t> &bytes) {
+computeFrequencyTable(const InputContainer &in) {
   std::unordered_map<std::uint8_t, std::size_t> frequencies;
 
-  for (auto b : bytes) {
-    if (auto frequency = frequencies.find(b); frequency != frequencies.end())
+  for (auto i = 0; i < in.getSize(); i++) {
+    if (auto frequency = frequencies.find(in.getData()[i]);
+        frequency != frequencies.end())
       frequency->second++;
     else
-      frequencies.insert({b, 1});
+      frequencies.insert({in.getData()[i], 1});
   }
 
   return frequencies;
@@ -163,9 +165,9 @@ computePrefixCodeTable(const std::shared_ptr<HuffmanTree> tree) {
   return table;
 }
 
-Output encodePrefixTableAndInput(
+OutputContainer encodePrefixTableAndInput(
     const std::unordered_map<std::uint8_t, PrefixCodeEntry> &table,
-    const std::vector<std::uint8_t> &in) {
+    const InputContainer &in) {
   FlatBufferBuilder builder;
   std::size_t compressed_content_bits_sz = 0;
 
@@ -206,8 +208,8 @@ Output encodePrefixTableAndInput(
   auto compressed_in = encoded_compressed_in_sz + sizeof compressed_in_sz;
   std::uint32_t current_byte_index = 0;
   std::uint8_t byte_index = 0;
-  for (auto byte : in) {
-    auto prefix_entry = table.find(byte);
+  for (auto i = 0; i < in.getSize(); i++) {
+    auto prefix_entry = table.find(in.getData()[i]);
     auto bits = prefix_entry->second.getBits();
     assert(bits <= BITS_IN_BYTE &&
            "entry bits must be truncated to byte size in bits");
@@ -240,16 +242,21 @@ Output encodePrefixTableAndInput(
   SHA256(out_data + SHA256_DIGEST_LENGTH, out_sz - SHA256_DIGEST_LENGTH,
          hash_digest);
 
-  return Output(out_data, out_sz);
+  return OutputContainer(out_data, out_sz);
 }
 
-Output decodePrefixTableAndInput(const std::vector<std::uint8_t> &in) {
-  Output out;
+OutputContainer decodePrefixTableAndInput(const InputContainer &in) {
+  OutputContainer out;
 
-  if (in.empty())
+  if (in.isEmpty())
     throw TreeCoderError("file is empty");
 
   // TODO: implement
+  // - validate integrity with hash
+  // - decode table
+  // - validate all section sizes
+  // - compute tree from table
+  // - decompress encoded file (recursively?)
 
   // WARN: handle case when byte code == bits, i.e., there's only one byte type.
 
@@ -260,7 +267,7 @@ TreeCoder::TreeCoder() {}
 
 TreeCoder::~TreeCoder() {}
 
-Output TreeCoder::encode(const std::vector<std::uint8_t> &in) {
+OutputContainer TreeCoder::encode(const InputContainer &in) {
   auto frequencies = computeFrequencyTable(in);
 
   if (frequencies.empty())
@@ -273,7 +280,7 @@ Output TreeCoder::encode(const std::vector<std::uint8_t> &in) {
   return encodePrefixTableAndInput(table, in);
 }
 
-Output TreeCoder::decode(const std::vector<std::uint8_t> &in) {
+OutputContainer TreeCoder::decode(const InputContainer &in) {
   return decodePrefixTableAndInput(in);
 }
 } // namespace treecoder

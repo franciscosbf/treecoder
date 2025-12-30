@@ -5,7 +5,6 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 #include "file.hpp"
 
@@ -26,7 +25,7 @@ public:
 };
 
 std::unordered_map<std::uint8_t, std::size_t>
-computeFrequencyTable(const std::vector<std::uint8_t> &raw);
+computeFrequencyTable(const InputContainer &in);
 
 class HuffmanNode {
 private:
@@ -123,11 +122,11 @@ std::unordered_map<std::uint8_t, PrefixCodeEntry>
 computePrefixCodeTable(const std::shared_ptr<HuffmanTree> tree);
 
 // WARN: assumes that the number of prefixes is equal to the number of in bytes
-Output encodePrefixTableAndInput(
+OutputContainer encodePrefixTableAndInput(
     const std::unordered_map<std::uint8_t, PrefixCodeEntry> &table,
-    const std::vector<std::uint8_t> &in);
+    const InputContainer &in);
 
-Output decodePrefixTableAndInput(const std::vector<std::uint8_t> &in);
+OutputContainer decodePrefixTableAndInput(const InputContainer &in);
 
 class TreeCoder {
 public:
@@ -135,8 +134,8 @@ public:
 
   ~TreeCoder();
 
-  Output encode(const std::vector<std::uint8_t> &in);
+  OutputContainer encode(const InputContainer &in);
 
-  Output decode(const std::vector<std::uint8_t> &in);
+  OutputContainer decode(const InputContainer &in);
 };
 } // namespace treecoder
