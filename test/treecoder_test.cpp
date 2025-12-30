@@ -189,22 +189,23 @@ TEST(EncodePrefixTableAndInputTest, PopulatedTable) {
 
   auto out = encodePrefixTableAndInput(table, in);
 
-  std::uint32_t table_buff_sz;
+  std::uint32_t encoded_table_sz;
   std::uint32_t encoded_compressed_in_sz;
 
-  ASSERT_TRUE(out.getSize() >= sizeof expected_out_hash + sizeof table_buff_sz +
+  ASSERT_TRUE(out.getSize() >= sizeof expected_out_hash +
+                                   sizeof encoded_table_sz +
                                    sizeof encoded_compressed_in_sz);
 
-  big_endian::get<std::uint32_t>(table_buff_sz,
+  big_endian::get<std::uint32_t>(encoded_table_sz,
                                  out.getData() + sizeof expected_out_hash);
 
-  big_endian::get<std::uint32_t>(encoded_compressed_in_sz,
-                                 out.getData() + sizeof expected_out_hash +
-                                     sizeof table_buff_sz);
+  big_endian::get<std::uint32_t>(
+      encoded_compressed_in_sz, out.getData() + sizeof expected_out_hash +
+                                    sizeof encoded_table_sz + encoded_table_sz);
 
-  ASSERT_TRUE(out.getSize() - sizeof expected_out_hash - sizeof table_buff_sz -
-                  sizeof encoded_compressed_in_sz ==
-              table_buff_sz + expected_compressed_out.size());
+  ASSERT_TRUE(out.getSize() - sizeof expected_out_hash -
+                  sizeof encoded_table_sz - sizeof encoded_compressed_in_sz ==
+              encoded_table_sz + expected_compressed_out.size());
 
   SHA256(out.getData() + sizeof expected_out_hash,
          out.getSize() - sizeof expected_out_hash, expected_out_hash);
@@ -213,9 +214,8 @@ TEST(EncodePrefixTableAndInputTest, PopulatedTable) {
       0);
   ;
 
-  auto prefix_table =
-      GetPrefixTable(out.getData() + sizeof expected_out_hash +
-                     sizeof table_buff_sz + sizeof encoded_compressed_in_sz);
+  auto prefix_table = GetPrefixTable(out.getData() + sizeof expected_out_hash +
+                                     sizeof encoded_table_sz);
   ASSERT_EQ(prefix_table->entries()->size(), table.size());
   for (auto prefix_entry : *prefix_table->entries()) {
     auto entry = table.find(prefix_entry->byte());
@@ -225,8 +225,8 @@ TEST(EncodePrefixTableAndInputTest, PopulatedTable) {
 
   for (auto i = 0; i < expected_compressed_out.size(); i++) {
     auto got_byte = std::bitset<BITS_IN_BYTE>{
-        out.getData()[i + sizeof expected_out_hash + sizeof table_buff_sz +
-                      sizeof encoded_compressed_in_sz + table_buff_sz]};
+        out.getData()[i + sizeof expected_out_hash + sizeof encoded_table_sz +
+                      encoded_table_sz + sizeof encoded_compressed_in_sz]};
     auto expected_byte = std::bitset<BITS_IN_BYTE>{expected_compressed_out[i]};
     ASSERT_EQ(got_byte, expected_byte);
   }

@@ -197,13 +197,13 @@ Output encodePrefixTableAndInput(
   auto encoded_table_sz = out_data + SHA256_DIGEST_LENGTH;
   big_endian::put<std::uint32_t>(table_buff_sz, encoded_table_sz);
 
-  auto encoded_compressed_in_sz = encoded_table_sz + sizeof table_buff_sz;
-  big_endian::put<std::uint32_t>(compressed_in_sz, encoded_compressed_in_sz);
-
-  auto encoded_table = encoded_compressed_in_sz + sizeof compressed_in_sz;
+  auto encoded_table = encoded_table_sz + sizeof table_buff_sz;
   std::memcpy(encoded_table, table_buff, table_buff_sz);
 
-  auto compressed_in = encoded_table + table_buff_sz;
+  auto encoded_compressed_in_sz = encoded_table + table_buff_sz;
+  big_endian::put<std::uint32_t>(compressed_in_sz, encoded_compressed_in_sz);
+
+  auto compressed_in = encoded_compressed_in_sz + sizeof compressed_in_sz;
   std::uint32_t current_byte_index = 0;
   std::uint8_t byte_index = 0;
   for (auto byte : in) {
