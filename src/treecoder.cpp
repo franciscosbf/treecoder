@@ -6,10 +6,13 @@
 
 #include "endian/big_endian.hpp"
 #include "file.hpp"
-#include "openssl/sha.h"
+#include "hash.hpp"
 #include "prefixtable_generated.h"
 #include "treecoder.hpp"
 
+constexpr std::uint32_t N_BYTE_BITS = std::numeric_limits<std::uint8_t>::digits;
+
+using namespace hash;
 using namespace endian;
 using namespace flatbuffers;
 using namespace prefixtable;
@@ -69,7 +72,7 @@ struct ComparableHuffmanTree {
 };
 
 std::shared_ptr<HuffmanTree> HuffmanTree::build(
-    const std::unordered_map<std::uint8_t, std::size_t> &frequencies) {
+    const std::unordered_map<std::uint8_t, std::uint32_t> &frequencies) {
   assert(!frequencies.empty() &&
          "frequencies table must contain at least one entry");
 
@@ -98,9 +101,9 @@ std::shared_ptr<HuffmanTree> HuffmanTree::build(
 
 HuffmanTree::~HuffmanTree() {}
 
-std::unordered_map<std::uint8_t, std::size_t>
+std::unordered_map<std::uint8_t, std::uint32_t>
 computeFrequencyTable(const InputContainer &in) {
-  std::unordered_map<std::uint8_t, std::size_t> frequencies;
+  std::unordered_map<std::uint8_t, std::uint32_t> frequencies;
 
   for (auto i = 0; i < in.getSize(); i++) {
     if (auto frequency = frequencies.find(in.getData()[i]);
@@ -132,13 +135,13 @@ void computePrefixCodePerByte(
 
     if (code == 0 && bits == 0) {
       bits = 1;
-    } else if (bits > BITS_IN_BYTE) {
+    } else if (bits > N_BYTE_BITS) {
       code = leaf_node.getByte();
       std::uint8_t empty_part = 0;
-      for (auto i = BITS_IN_BYTE - 1; i > 0; i--)
+      for (auto i = N_BYTE_BITS - 1; i > 0; i--)
         if ((code >> i) == 0)
           empty_part++;
-      bits = BITS_IN_BYTE - empty_part;
+      bits = N_BYTE_BITS - empty_part;
     }
 
     table.insert(
@@ -189,14 +192,14 @@ OutputContainer encodePrefixTableAndInput(
   auto table_buff = builder.GetBufferPointer();
 
   auto compressed_in_sz = static_cast<std::uint32_t>(
-      std::ceil(compressed_content_bits_sz / static_cast<float>(BITS_IN_BYTE)));
+      std::ceil(compressed_content_bits_sz / static_cast<float>(N_BYTE_BITS)));
 
-  std::uint32_t out_sz = SHA256_DIGEST_LENGTH + sizeof table_buff_sz +
+  std::uint32_t out_sz = HASH_DIGEST_LENGTH + sizeof table_buff_sz +
                          sizeof compressed_in_sz + table_buff_sz +
                          compressed_in_sz;
   auto out_data = new std::uint8_t[out_sz];
 
-  auto encoded_table_sz = out_data + SHA256_DIGEST_LENGTH;
+  auto encoded_table_sz = out_data + HASH_DIGEST_LENGTH;
   big_endian::put<std::uint32_t>(table_buff_sz, encoded_table_sz);
 
   auto encoded_table = encoded_table_sz + sizeof table_buff_sz;
@@ -211,53 +214,130 @@ OutputContainer encodePrefixTableAndInput(
   for (auto i = 0; i < in.getSize(); i++) {
     auto prefix_entry = table.find(in.getData()[i]);
     auto bits = prefix_entry->second.getBits();
-    assert(bits <= BITS_IN_BYTE &&
+    assert(bits <= N_BYTE_BITS &&
            "entry bits must be truncated to byte size in bits");
     auto code = prefix_entry->second.getCode();
-    std::uint8_t free_byte_indexes = BITS_IN_BYTE - byte_index;
+    std::uint8_t free_byte_indexes = N_BYTE_BITS - byte_index;
 
     if (bits <= free_byte_indexes) {
       if (byte_index == 0)
-        compressed_in[current_byte_index] = code << (BITS_IN_BYTE - bits);
+        compressed_in[current_byte_index] = code << (N_BYTE_BITS - bits);
       else
         compressed_in[current_byte_index] |=
-            code << (BITS_IN_BYTE - byte_index - bits);
+            code << (N_BYTE_BITS - byte_index - bits);
       byte_index += bits;
     } else {
       std::uint8_t remaining = bits - free_byte_indexes;
       compressed_in[current_byte_index] |= code >> remaining;
       current_byte_index++;
       compressed_in[current_byte_index] = (code & ~(~0 << remaining))
-                                          << (BITS_IN_BYTE - remaining);
+                                          << (N_BYTE_BITS - remaining);
       byte_index = remaining;
     }
 
-    if (byte_index == BITS_IN_BYTE) {
+    if (byte_index == N_BYTE_BITS) {
       byte_index = 0;
       current_byte_index++;
     }
   }
 
   auto hash_digest = out_data;
-  SHA256(out_data + SHA256_DIGEST_LENGTH, out_sz - SHA256_DIGEST_LENGTH,
-         hash_digest);
+  computeHash(
+      out_data + HASH_DIGEST_LENGTH, out_sz - HASH_DIGEST_LENGTH,
+      reinterpret_cast<std::uint8_t (&)[HASH_DIGEST_LENGTH]>(*hash_digest));
 
   return OutputContainer(out_data, out_sz);
 }
 
-OutputContainer decodePrefixTableAndInput(const InputContainer &in) {
+bool isInputUntampered(const InputContainer &in) {
+  auto data = in.getData();
+  auto size = in.getSize();
+
+  if (size < HASH_DIGEST_LENGTH)
+    return false;
+
+  auto expected_hash_digest = data;
+  std::uint8_t got_hash_digest[HASH_DIGEST_LENGTH];
+  computeHash(data + HASH_DIGEST_LENGTH, size - HASH_DIGEST_LENGTH,
+              got_hash_digest);
+
+  return std::memcmp(got_hash_digest, expected_hash_digest, HASH_DIGEST_LENGTH);
+}
+
+EncodedSections::EncodedSections(const std::uint8_t *encoded_table,
+                                 std::uint32_t encoded_table_sz,
+                                 const std::uint8_t *encoded_compressed_in,
+                                 std::uint32_t encoded_compressed_in_sz)
+    : encoded_table(encoded_table), table_sz(encoded_table_sz),
+      encoded_compressed_in(encoded_compressed_in),
+      compressed_in_sz(encoded_compressed_in_sz) {}
+
+EncodedSections::~EncodedSections() {}
+
+const std::uint8_t *EncodedSections::getEncodedTable() const {
+  return encoded_table;
+}
+
+std::uint32_t EncodedSections::getEncodedTableSize() const { return table_sz; }
+
+const std::uint8_t *EncodedSections::getEncodedCompressedInput() const {
+  return encoded_compressed_in;
+}
+
+std::uint32_t EncodedSections::getEncodedCompressedInSize() const {
+  return compressed_in_sz;
+}
+
+std::optional<EncodedSections> tryLocateSections(const InputContainer &in) {
+  auto data = in.getData();
+  auto size = in.getSize();
+
+  if (size < HASH_DIGEST_LENGTH + (2 * sizeof(std::uint32_t)))
+    return {};
+
+  std::uint32_t table_sz;
+  auto encoded_table_sz = data + HASH_DIGEST_LENGTH;
+  big_endian::get(table_sz, encoded_table_sz);
+
+  std::uint32_t compressed_in_sz;
+  auto encoded_compressed_in_sz = data + sizeof(std::uint32_t);
+  big_endian::get(table_sz, encoded_table_sz);
+
+  if (size - (HASH_DIGEST_LENGTH + (2 * sizeof(std::uint32_t))) !=
+      table_sz + compressed_in_sz)
+    return {};
+
+  auto encoded_table = encoded_compressed_in_sz + sizeof(std::uint32_t);
+  auto encoded_compressed_in = encoded_table + table_sz;
+
+  return EncodedSections(encoded_table, table_sz, encoded_compressed_in,
+                         compressed_in_sz);
+}
+
+std::optional<std::unordered_map<std::uint8_t, std::uint32_t>>
+tryDecodePrefixTable(const std::uint8_t *encoded_table,
+                     std::uint32_t encoded_table_sz) {
+  std::unordered_map<std::uint8_t, std::uint32_t> table;
+
+  Verifier verifier(encoded_table, encoded_table_sz);
+  if (!VerifyPrefixTableBuffer(verifier))
+    return {};
+
+  auto prefix_table = GetPrefixTable(encoded_table);
+  for (const auto &prefix_entry : *prefix_table->entries())
+    table.insert({prefix_entry->byte(), prefix_entry->frequency()});
+
+  return table;
+}
+
+std::optional<OutputContainer>
+tryDecodeInput(const std::shared_ptr<HuffmanTree> tree,
+               const std::uint8_t *encoded_compressed_in,
+               std::uint32_t encoded_compressed_in_sz) {
   OutputContainer out;
 
-  if (in.isEmpty())
-    throw TreeCoderError("file is empty");
-
   // TODO: implement
-  // - validate integrity with hash
-  // - decode table
-  // - validate all section sizes
-  // - compute tree from table
   // - decompress encoded file (recursively?)
-
   // WARN: handle case when byte code == bits, i.e., there's only one byte type.
 
   return out;
@@ -281,6 +361,36 @@ OutputContainer TreeCoder::encode(const InputContainer &in) {
 }
 
 OutputContainer TreeCoder::decode(const InputContainer &in) {
-  return decodePrefixTableAndInput(in);
+  if (in.isEmpty())
+    throw TreeCoderError("file is empty");
+
+  if (!isInputUntampered(in))
+    throw TreeCoderError("encoded file was altered");
+
+  auto possible_encoded_sections = tryLocateSections(in);
+  if (!possible_encoded_sections.has_value())
+    throw TreeCoderError("unable to locate encoded file content sections");
+  auto encoded_sections = possible_encoded_sections.value();
+
+  auto possible_table =
+      tryDecodePrefixTable(encoded_sections.getEncodedTable(),
+                           encoded_sections.getEncodedTableSize());
+  if (!possible_table.has_value())
+    throw TreeCoderError(
+        "file contains invalid data in prefix code table section");
+  auto table = possible_table.value();
+  if (table.empty())
+    throw TreeCoderError("file contains empty prefix code table");
+
+  auto tree = HuffmanTree::build(table);
+
+  auto possible_out =
+      tryDecodeInput(tree, encoded_sections.getEncodedCompressedInput(),
+                     encoded_sections.getEncodedCompressedInSize());
+  if (!possible_out.has_value())
+    throw TreeCoderError("file contains invalid data in compressed section");
+  auto out = possible_out.value();
+
+  return out;
 }
 } // namespace treecoder

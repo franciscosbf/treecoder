@@ -21,26 +21,26 @@ include_directories(include)
 include(FetchContent)
 set(FETCHCONTENT_QUIET FALSE)
 
-FetchContent_Declare(argparse
+fetchcontent_declare(argparse
   GIT_REPOSITORY https://github.com/p-ranav/argparse.git
   GIT_TAG v3.2
 )
-FetchContent_MakeAvailable(argparse)
+fetchcontent_makeavailable(argparse)
 
-FetchContent_Declare(googletest
+fetchcontent_declare(googletest
   GIT_REPOSITORY https://github.com/google/googletest.git
   GIT_TAG v1.17.0
 )
-FetchContent_MakeAvailable(googletest)
+fetchcontent_makeavailable(googletest)
 
 set(FLATBUFFERS_BUILD_TESTS OFF)
 set(FLATBUFFERS_INSTALL OFF)
 set(FLATBUFFERS_BUILD_FLATC OFF)
-FetchContent_Declare(flatbuffers
+fetchcontent_declare(flatbuffers
   GIT_REPOSITORY git@github.com:google/flatbuffers.git
   GIT_TAG v25.12.19
 )
-FetchContent_MakeAvailable(flatbuffers)
+fetchcontent_makeavailable(flatbuffers)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/deps/endian endian)
 
@@ -52,6 +52,7 @@ add_executable(${PROJECT_NAME}
   src/main.cpp
   src/treecoder.cpp
   src/file.cpp
+  src/hash.cpp
 )
 
 target_compile_options(${PROJECT_NAME}
@@ -77,6 +78,7 @@ add_executable(${TREECODER_TEST}
   test/treecoder_test.cpp
   src/treecoder.cpp
   src/file.cpp
+  src/hash.cpp
 )
 
 target_link_libraries(${TREECODER_TEST}

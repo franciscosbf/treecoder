@@ -2,16 +2,19 @@
 #include <cstdint>
 #include <cstring>
 #include <gtest/gtest.h>
+#include <limits>
 #include <memory>
 #include <unordered_map>
 #include <vector>
 
 #include "endian/big_endian.hpp"
 #include "file.hpp"
-#include "openssl/sha.h"
+#include "hash.hpp"
 #include "prefixtable_generated.h"
 #include "treecoder.hpp"
 
+using namespace hash;
+using namespace flatbuffers;
 using namespace testing;
 using namespace treecoder;
 using namespace prefixtable;
@@ -44,8 +47,8 @@ TEST(FrequencyTableTest, PopulatedTable) {
 }
 
 TEST(HuffmanTreeTest, PopulatedTree) {
-  std::unordered_map<std::uint8_t, std::size_t> frequencies = {{'a', 3},
-                                                               {'b', 1}};
+  std::unordered_map<std::uint8_t, std::uint32_t> frequencies = {{'a', 3},
+                                                                 {'b', 1}};
 
   auto tree = HuffmanTree::build(frequencies);
 
@@ -66,7 +69,7 @@ TEST(HuffmanTreeTest, PopulatedTree) {
 }
 
 TEST(HuffmanTreeTest, OneEntryTree) {
-  std::unordered_map<std::uint8_t, std::size_t> frequencies = {{'a', 3}};
+  std::unordered_map<std::uint8_t, std::uint32_t> frequencies = {{'a', 3}};
 
   auto tree = HuffmanTree::build(frequencies);
 
@@ -79,7 +82,7 @@ TEST(HuffmanTreeTest, OneEntryTree) {
 }
 
 TEST(HuffmanTreeTest, DoNotAcceptZeroFrequencies) {
-  std::unordered_map<std::uint8_t, std::size_t> frequencies;
+  std::unordered_map<std::uint8_t, std::uint32_t> frequencies;
 
   ASSERT_DEATH(
       { HuffmanTree::build(frequencies); },
@@ -189,7 +192,7 @@ TEST(EncodePrefixTableAndInputTest, PopulatedTable) {
       0b11011011, 0b00100000, 0b01000001, 0b01010011,
       0b01111110, 0b10111101, 0b11000000};
 
-  std::uint8_t expected_out_hash[SHA256_DIGEST_LENGTH];
+  std::uint8_t expected_out_hash[HASH_DIGEST_LENGTH];
 
   auto out = encodePrefixTableAndInput(table, in);
 
@@ -211,12 +214,17 @@ TEST(EncodePrefixTableAndInputTest, PopulatedTable) {
                   sizeof encoded_table_sz - sizeof encoded_compressed_in_sz ==
               encoded_table_sz + expected_compressed_out.size());
 
-  SHA256(out.getData() + sizeof expected_out_hash,
-         out.getSize() - sizeof expected_out_hash, expected_out_hash);
+  computeHash(out.getData() + sizeof expected_out_hash,
+              out.getSize() - sizeof expected_out_hash, expected_out_hash);
   ASSERT_EQ(
       std::memcmp(out.getData(), expected_out_hash, sizeof expected_out_hash),
       0);
   ;
+
+  Verifier verifier(out.getData() + sizeof expected_out_hash +
+                        sizeof encoded_table_sz,
+                    out.getSize());
+  ASSERT_TRUE(VerifyPrefixTableBuffer(verifier));
 
   auto prefix_table = GetPrefixTable(out.getData() + sizeof expected_out_hash +
                                      sizeof encoded_table_sz);
@@ -228,10 +236,11 @@ TEST(EncodePrefixTableAndInputTest, PopulatedTable) {
   }
 
   for (auto i = 0; i < expected_compressed_out.size(); i++) {
-    auto got_byte = std::bitset<BITS_IN_BYTE>{
+    auto got_byte = std::bitset<std::numeric_limits<std::uint8_t>::digits>{
         out.getData()[i + sizeof expected_out_hash + sizeof encoded_table_sz +
                       encoded_table_sz + sizeof encoded_compressed_in_sz]};
-    auto expected_byte = std::bitset<BITS_IN_BYTE>{expected_compressed_out[i]};
+    auto expected_byte = std::bitset<std::numeric_limits<std::uint8_t>::digits>{
+        expected_compressed_out[i]};
     ASSERT_EQ(got_byte, expected_byte);
   }
 }

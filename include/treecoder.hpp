@@ -3,17 +3,15 @@
 #include <cstdint>
 #include <exception>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
 #include "file.hpp"
 
-#define BITS_IN_BYTE 8
-
 using namespace file;
 
 namespace treecoder {
-
 class TreeCoderError : public std::exception {
 private:
   std::string reason;
@@ -24,7 +22,7 @@ public:
   const char *what() const noexcept override;
 };
 
-std::unordered_map<std::uint8_t, std::size_t>
+std::unordered_map<std::uint8_t, std::uint32_t>
 computeFrequencyTable(const InputContainer &in);
 
 class HuffmanNode {
@@ -95,7 +93,7 @@ public:
   const HuffmanNode &getRoot() const;
 
   static std::shared_ptr<HuffmanTree>
-  build(const std::unordered_map<std::uint8_t, std::size_t> &frequencies);
+  build(const std::unordered_map<std::uint8_t, std::uint32_t> &frequencies);
 };
 
 class PrefixCodeEntry {
@@ -126,7 +124,40 @@ OutputContainer encodePrefixTableAndInput(
     const std::unordered_map<std::uint8_t, PrefixCodeEntry> &table,
     const InputContainer &in);
 
-OutputContainer decodePrefixTableAndInput(const InputContainer &in);
+bool isInputUntampered(const InputContainer &in);
+
+class EncodedSections {
+private:
+  const std::uint8_t *encoded_table, *encoded_compressed_in;
+  std::uint32_t table_sz, compressed_in_sz;
+
+public:
+  EncodedSections(const std::uint8_t *encoded_table,
+                  std::uint32_t encoded_table_sz,
+                  const std::uint8_t *encoded_compressed_in,
+                  std::uint32_t encoded_compressed_in_sz);
+
+  ~EncodedSections();
+
+  const std::uint8_t *getEncodedTable() const;
+
+  std::uint32_t getEncodedTableSize() const;
+
+  const std::uint8_t *getEncodedCompressedInput() const;
+
+  std::uint32_t getEncodedCompressedInSize() const;
+};
+
+std::optional<EncodedSections> tryLocateSections(const InputContainer &in);
+
+std::optional<std::unordered_map<std::uint8_t, std::uint32_t>>
+tryDecodePrefixTable(const std::uint8_t *encoded_table,
+                     std::uint32_t encoded_table_sz);
+
+std::optional<OutputContainer>
+tryDecodeInput(const std::shared_ptr<HuffmanTree> tree,
+               const std::uint8_t *encoded_compressed_in,
+               std::uint32_t encoded_compressed_in_sz);
 
 class TreeCoder {
 public:
