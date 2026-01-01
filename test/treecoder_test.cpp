@@ -347,3 +347,15 @@ TEST(TryDecodePrefixTableTest, InvalidTable) {
       tryDecodePrefixTable(builder.GetBufferPointer(), builder.GetSize() - 4);
   ASSERT_FALSE(possible_table.has_value());
 }
+
+TEST(CalcNumberOfCompressedBytes, PopulatedTable) {
+  std::unordered_map<std::uint8_t, std::uint32_t> table = {{'A', 3}, {'B', 4}};
+
+  ASSERT_EQ(calcNumberOfCompressedBytes(table), 7);
+}
+
+TEST(CalcNumberOfCompressedBytes, EmptyTable) {
+  std::unordered_map<std::uint8_t, std::uint32_t> table;
+
+  ASSERT_EQ(calcNumberOfCompressedBytes(table), 0);
+}

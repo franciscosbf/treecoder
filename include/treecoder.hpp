@@ -154,8 +154,12 @@ std::optional<std::unordered_map<std::uint8_t, std::uint32_t>>
 tryDecodePrefixTable(const std::uint8_t *encoded_table,
                      std::uint32_t encoded_table_sz);
 
+std::uint32_t calcNumberOfCompressedBytes(
+    std::unordered_map<std::uint8_t, std::uint32_t> table);
+
 std::optional<Container>
-tryDecodeInput(const std::shared_ptr<HuffmanTree> tree,
+tryDecodeInput(std::uint32_t compressed_bytes,
+               const std::shared_ptr<HuffmanTree> tree,
                const std::uint8_t *encoded_compressed_in,
                std::uint32_t encoded_compressed_in_sz);
 

@@ -331,8 +331,19 @@ tryDecodePrefixTable(const std::uint8_t *encoded_table,
   return table;
 }
 
+std::uint32_t calcNumberOfCompressedBytes(
+    std::unordered_map<std::uint8_t, std::uint32_t> table) {
+  std::uint32_t compressed_bytes = 0;
+
+  for (auto frequency : table)
+    compressed_bytes += frequency.second;
+
+  return compressed_bytes;
+}
+
 std::optional<Container>
-tryDecodeInput(const std::shared_ptr<HuffmanTree> tree,
+tryDecodeInput(std::uint32_t compressed_bytes,
+               const std::shared_ptr<HuffmanTree> tree,
                const std::uint8_t *encoded_compressed_in,
                std::uint32_t encoded_compressed_in_sz) {
   Container out;
@@ -383,11 +394,12 @@ Container TreeCoder::decode(const Container &in) {
   if (table.empty())
     throw TreeCoderError("file contains empty prefix code table");
 
+  auto compressed_bytes = calcNumberOfCompressedBytes(table);
   auto tree = HuffmanTree::build(table);
 
-  auto possible_out =
-      tryDecodeInput(tree, encoded_sections.getEncodedCompressedInput(),
-                     encoded_sections.getEncodedCompressedInSize());
+  auto possible_out = tryDecodeInput(
+      compressed_bytes, tree, encoded_sections.getEncodedCompressedInput(),
+      encoded_sections.getEncodedCompressedInSize());
   if (!possible_out.has_value())
     throw TreeCoderError("file contains invalid data in compressed section");
   auto out = possible_out.value();
