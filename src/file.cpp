@@ -5,11 +5,11 @@
 namespace file {
 Container::Container() : data(nullptr), size(0) {}
 
-Container::Container(std::uint8_t *data, std::uint32_t size)
-    : data(data), size(size) {}
+Container::Container(std::uint8_t *data, std::uint32_t size, bool free)
+    : data(data), size(size), free(free) {}
 
 Container::~Container() {
-  if (data == nullptr)
+  if (data == nullptr || !free)
     return;
 
   delete[] data;
@@ -19,14 +19,7 @@ const std::uint8_t *Container::getData() const { return data; }
 
 std::uint32_t Container::getSize() const { return size; }
 
-InputContainer::InputContainer() {}
-
-InputContainer::InputContainer(std::uint8_t *data, std::uint32_t size)
-    : Container(data, size) {}
-
-InputContainer::~InputContainer() {}
-
-std::uint32_t InputContainer::isEmpty() const { return size == 0; }
+std::uint32_t Container::isEmpty() const { return size == 0; }
 
 InputFile::InputFile(const std::string &filename) : filename(filename) {
   istream.open(filename, std::ifstream::in | std::ifstream::binary);
@@ -37,7 +30,7 @@ InputFile::~InputFile() {
     istream.close();
 }
 
-InputContainer InputFile::read() {
+Container InputFile::read() {
   auto size = std::filesystem::file_size(filename);
   if (size == 0)
     return {};
@@ -46,15 +39,8 @@ InputContainer InputFile::read() {
 
   istream.read(reinterpret_cast<char *>(data), size);
 
-  return InputContainer(data, size);
+  return Container(data, size);
 }
-
-OutputContainer::OutputContainer() {}
-
-OutputContainer::OutputContainer(std::uint8_t *data, std::uint32_t size)
-    : Container(data, size) {}
-
-OutputContainer::~OutputContainer() {}
 
 OutputFile::OutputFile(const std::string &filename) {
   ostream.open(filename, std::ofstream::out | std::ofstream::binary |
@@ -66,7 +52,7 @@ OutputFile::~OutputFile() {
     ostream.close();
 }
 
-void OutputFile::write(const OutputContainer &out) {
+void OutputFile::write(const Container &out) {
   ostream.write(reinterpret_cast<const char *>(out.getData()), out.getSize());
 }
 } // namespace file

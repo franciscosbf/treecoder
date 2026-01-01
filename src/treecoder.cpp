@@ -102,7 +102,7 @@ std::shared_ptr<HuffmanTree> HuffmanTree::build(
 HuffmanTree::~HuffmanTree() {}
 
 std::unordered_map<std::uint8_t, std::uint32_t>
-computeFrequencyTable(const InputContainer &in) {
+computeFrequencyTable(const Container &in) {
   std::unordered_map<std::uint8_t, std::uint32_t> frequencies;
 
   for (auto i = 0; i < in.getSize(); i++) {
@@ -168,9 +168,9 @@ computePrefixCodeTable(const std::shared_ptr<HuffmanTree> tree) {
   return table;
 }
 
-OutputContainer encodePrefixTableAndInput(
+Container encodePrefixTableAndInput(
     const std::unordered_map<std::uint8_t, PrefixCodeEntry> &table,
-    const InputContainer &in) {
+    const Container &in) {
   FlatBufferBuilder builder;
   std::size_t compressed_content_bits_sz = 0;
 
@@ -246,10 +246,10 @@ OutputContainer encodePrefixTableAndInput(
       out_data + HASH_DIGEST_LENGTH, out_sz - HASH_DIGEST_LENGTH,
       reinterpret_cast<std::uint8_t (&)[HASH_DIGEST_LENGTH]>(*hash_digest));
 
-  return OutputContainer(out_data, out_sz);
+  return Container(out_data, out_sz);
 }
 
-bool isInputUntampered(const InputContainer &in) {
+bool isInputUntampered(const Container &in) {
   auto data = in.getData();
   auto size = in.getSize();
 
@@ -288,27 +288,28 @@ std::uint32_t EncodedSections::getEncodedCompressedInSize() const {
   return compressed_in_sz;
 }
 
-std::optional<EncodedSections> tryLocateSections(const InputContainer &in) {
+std::optional<EncodedSections> tryLocateSections(const Container &in) {
   auto data = in.getData();
   auto size = in.getSize();
 
-  if (size < HASH_DIGEST_LENGTH + (2 * sizeof(std::uint32_t)))
+  if (size < HASH_DIGEST_LENGTH + sizeof(std::uint32_t))
     return {};
 
   std::uint32_t table_sz;
   auto encoded_table_sz = data + HASH_DIGEST_LENGTH;
   big_endian::get(table_sz, encoded_table_sz);
+  auto encoded_table = encoded_table_sz + sizeof(std::uint32_t);
 
-  std::uint32_t compressed_in_sz;
-  auto encoded_compressed_in_sz = data + sizeof(std::uint32_t);
-  big_endian::get(table_sz, encoded_table_sz);
-
-  if (size - (HASH_DIGEST_LENGTH + (2 * sizeof(std::uint32_t))) !=
-      table_sz + compressed_in_sz)
+  if (size < (encoded_table + table_sz) - encoded_table)
     return {};
 
-  auto encoded_table = encoded_compressed_in_sz + sizeof(std::uint32_t);
-  auto encoded_compressed_in = encoded_table + table_sz;
+  std::uint32_t compressed_in_sz;
+  auto encoded_compressed_in_sz = encoded_table + table_sz;
+  big_endian::get(compressed_in_sz, encoded_compressed_in_sz);
+  auto encoded_compressed_in = encoded_compressed_in_sz + sizeof(std::uint32_t);
+
+  if (size != (encoded_compressed_in + compressed_in_sz) - in.getData())
+    return {};
 
   return EncodedSections(encoded_table, table_sz, encoded_compressed_in,
                          compressed_in_sz);
@@ -330,11 +331,11 @@ tryDecodePrefixTable(const std::uint8_t *encoded_table,
   return table;
 }
 
-std::optional<OutputContainer>
+std::optional<Container>
 tryDecodeInput(const std::shared_ptr<HuffmanTree> tree,
                const std::uint8_t *encoded_compressed_in,
                std::uint32_t encoded_compressed_in_sz) {
-  OutputContainer out;
+  Container out;
 
   // TODO: implement
   // - decompress encoded file (recursively?)
@@ -347,7 +348,7 @@ TreeCoder::TreeCoder() {}
 
 TreeCoder::~TreeCoder() {}
 
-OutputContainer TreeCoder::encode(const InputContainer &in) {
+Container TreeCoder::encode(const Container &in) {
   auto frequencies = computeFrequencyTable(in);
 
   if (frequencies.empty())
@@ -360,7 +361,7 @@ OutputContainer TreeCoder::encode(const InputContainer &in) {
   return encodePrefixTableAndInput(table, in);
 }
 
-OutputContainer TreeCoder::decode(const InputContainer &in) {
+Container TreeCoder::decode(const Container &in) {
   if (in.isEmpty())
     throw TreeCoderError("file is empty");
 

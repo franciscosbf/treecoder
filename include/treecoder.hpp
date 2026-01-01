@@ -23,7 +23,7 @@ public:
 };
 
 std::unordered_map<std::uint8_t, std::uint32_t>
-computeFrequencyTable(const InputContainer &in);
+computeFrequencyTable(const Container &in);
 
 class HuffmanNode {
 private:
@@ -120,11 +120,11 @@ std::unordered_map<std::uint8_t, PrefixCodeEntry>
 computePrefixCodeTable(const std::shared_ptr<HuffmanTree> tree);
 
 // WARN: assumes that the number of prefixes is equal to the number of in bytes
-OutputContainer encodePrefixTableAndInput(
+Container encodePrefixTableAndInput(
     const std::unordered_map<std::uint8_t, PrefixCodeEntry> &table,
-    const InputContainer &in);
+    const Container &in);
 
-bool isInputUntampered(const InputContainer &in);
+bool isInputUntampered(const Container &in);
 
 class EncodedSections {
 private:
@@ -148,13 +148,13 @@ public:
   std::uint32_t getEncodedCompressedInSize() const;
 };
 
-std::optional<EncodedSections> tryLocateSections(const InputContainer &in);
+std::optional<EncodedSections> tryLocateSections(const Container &in);
 
 std::optional<std::unordered_map<std::uint8_t, std::uint32_t>>
 tryDecodePrefixTable(const std::uint8_t *encoded_table,
                      std::uint32_t encoded_table_sz);
 
-std::optional<OutputContainer>
+std::optional<Container>
 tryDecodeInput(const std::shared_ptr<HuffmanTree> tree,
                const std::uint8_t *encoded_compressed_in,
                std::uint32_t encoded_compressed_in_sz);
@@ -165,8 +165,8 @@ public:
 
   ~TreeCoder();
 
-  OutputContainer encode(const InputContainer &in);
+  Container encode(const Container &in);
 
-  OutputContainer decode(const InputContainer &in);
+  Container decode(const Container &in);
 };
 } // namespace treecoder

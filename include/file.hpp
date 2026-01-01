@@ -9,26 +9,18 @@ class Container {
 protected:
   std::uint8_t *data;
   std::uint32_t size;
-
-  Container();
-
-  Container(std::uint8_t *data, std::uint32_t size);
+  bool free;
 
 public:
-  virtual ~Container();
+  Container();
+
+  Container(std::uint8_t *data, std::uint32_t size, bool free = true);
+
+  ~Container();
 
   const std::uint8_t *getData() const;
 
   std::uint32_t getSize() const;
-};
-
-class InputContainer final : public Container {
-public:
-  InputContainer();
-
-  InputContainer(std::uint8_t *data, std::uint32_t size);
-
-  ~InputContainer();
 
   std::uint32_t isEmpty() const;
 };
@@ -43,16 +35,7 @@ public:
 
   ~InputFile();
 
-  InputContainer read();
-};
-
-class OutputContainer final : public Container {
-public:
-  OutputContainer();
-
-  OutputContainer(std::uint8_t *data, std::uint32_t size);
-
-  ~OutputContainer();
+  Container read();
 };
 
 class OutputFile {
@@ -64,6 +47,6 @@ public:
 
   ~OutputFile();
 
-  void write(const OutputContainer &out);
+  void write(const Container &out);
 };
 } // namespace file

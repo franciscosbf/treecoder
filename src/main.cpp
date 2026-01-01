@@ -37,11 +37,11 @@ int main(int argc, char **argv) {
   }
 
   const std::string ifilename = program.get("file");
-  InputContainer input;
+  Container in;
 
   try {
     InputFile ifile(ifilename);
-    input = ifile.read();
+    in = ifile.read();
   } catch (const std::exception &e) {
     std::cerr << "While reading input file " << ifilename << ": " << e.what()
               << std::endl;
@@ -51,18 +51,18 @@ int main(int argc, char **argv) {
 
   bool to_decode = wants_to_decode(ifilename);
   std::string ofilename;
-  OutputContainer output;
+  Container out;
   TreeCoder tc;
   std::function<void()> treecode;
 
   if (to_decode) {
     ofilename = ifilename.substr(ifilename.size() - HUFFMAN_SUFFIX.size());
 
-    treecode = [&]() { output = tc.decode(input); };
+    treecode = [&]() { out = tc.decode(in); };
   } else {
     ofilename = ifilename + HUFFMAN_SUFFIX;
 
-    treecode = [&]() { output = tc.encode(input); };
+    treecode = [&]() { out = tc.encode(in); };
   }
 
   try {
@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
 
   try {
     OutputFile ofile(ofilename);
-    ofile.write(output);
+    ofile.write(out);
   } catch (const std::exception &e) {
     std::cerr << "While writing output file " << ifilename << ": " << e.what();
   }

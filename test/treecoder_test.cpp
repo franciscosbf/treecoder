@@ -21,7 +21,7 @@ using namespace prefixtable;
 using namespace endian;
 
 TEST(FrequencyTableTest, EmptyTable) {
-  InputContainer in;
+  Container in;
 
   auto frequencies = computeFrequencyTable(in);
 
@@ -29,9 +29,8 @@ TEST(FrequencyTableTest, EmptyTable) {
 }
 
 TEST(FrequencyTableTest, PopulatedTable) {
-  auto data = new std::uint8_t[4];
-  std::memcpy(data, "aaba", 4);
-  InputContainer in(data, 4);
+  Container in(reinterpret_cast<std::uint8_t *>(const_cast<char *>("aaba")), 4,
+               false);
 
   auto frequencies = computeFrequencyTable(in);
 
@@ -184,9 +183,9 @@ TEST(EncodePrefixTableAndInputTest, PopulatedTable) {
       {'A', {3, 0b110, 3}}, {'B', {2, 0b010, 3}}, {'C', {4, 0b00, 2}},
       {'D', {6, 0b10, 2}},  {'E', {2, 0b011, 3}}, {'F', {3, 0b111, 3}}};
 
-  auto data = new std::uint8_t[20];
-  std::memcpy(data, "AAABCCBCCDDDEEFDDFDF", 20);
-  InputContainer in(data, 20);
+  Container in(reinterpret_cast<std::uint8_t *>(
+                   const_cast<char *>("AAABCCBCCDDDEEFDDFDF")),
+               20, false);
 
   std::vector<std::uint8_t> expected_compressed_out = {
       0b11011011, 0b00100000, 0b01000001, 0b01010011,
@@ -249,9 +248,8 @@ TEST(EncodePrefixTableAndInputTest, DoNotAcceptCodeWithMoreThan8Bits) {
   std::unordered_map<std::uint8_t, PrefixCodeEntry> table = {
       {'A', {3, 0b110, 9}}};
 
-  auto data = new std::uint8_t[3];
-  std::memcpy(data, "AAA", 3);
-  InputContainer in(data, 3);
+  Container in(reinterpret_cast<std::uint8_t *>(const_cast<char *>("AAA")), 3,
+               false);
 
   ASSERT_DEATH(
       { encodePrefixTableAndInput(table, in); },
@@ -260,7 +258,64 @@ TEST(EncodePrefixTableAndInputTest, DoNotAcceptCodeWithMoreThan8Bits) {
 
 TEST(EncodeTest, EmptyInput) {
   TreeCoder tc;
-  InputContainer in;
+  Container in;
 
   ASSERT_THROW({ tc.encode(in); }, TreeCoderError);
+}
+
+TEST(TryLocateSectionsTest, ValidSections) {
+  TreeCoder tc;
+
+  Container in(reinterpret_cast<std::uint8_t *>(const_cast<char *>("AAA")), 3,
+               false);
+
+  auto out = tc.encode(in);
+
+  auto possible_sections = tryLocateSections(out);
+  ASSERT_TRUE(possible_sections.has_value());
+  auto sections = possible_sections.value();
+
+  Verifier verifier(sections.getEncodedTable(), sections.getEncodedTableSize());
+  ASSERT_TRUE(VerifyPrefixTableBuffer(verifier));
+
+  ASSERT_EQ(sections.getEncodedCompressedInSize(), 1);
+  ASSERT_EQ(sections.getEncodedCompressedInput()[0], 0);
+}
+
+TEST(TryLocateSectionsTest, TableSizeDoNotExist) {
+  TreeCoder tc;
+
+  Container in(reinterpret_cast<std::uint8_t *>(const_cast<char *>("AAA")), 3,
+               false);
+
+  auto out = tc.encode(in);
+
+  Container _out(const_cast<std::uint8_t *>(out.getData()), 4, false);
+  ASSERT_FALSE(tryLocateSections(_out).has_value());
+}
+
+TEST(TryLocateSectionsTest, TableSectionIsInvalid) {
+  TreeCoder tc;
+
+  Container in(reinterpret_cast<std::uint8_t *>(const_cast<char *>("AAA")), 3,
+               false);
+
+  auto out = tc.encode(in);
+
+  Container _out(const_cast<std::uint8_t *>(out.getData()),
+                 HASH_DIGEST_LENGTH + sizeof(std::uint32_t) + 4, false);
+  ASSERT_FALSE(tryLocateSections(_out).has_value());
+}
+
+TEST(TryLocateSectionsTest, CompressedSectionIsInvalid) {
+  TreeCoder tc;
+
+  Container in(reinterpret_cast<std::uint8_t *>(const_cast<char *>("AAA")), 3,
+               false);
+
+  auto out = tc.encode(in);
+
+  Container _out(const_cast<std::uint8_t *>(out.getData()), out.getSize() - 1,
+                 false);
+  ASSERT_FALSE(tryLocateSections(_out).has_value());
 }
