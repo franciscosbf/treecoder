@@ -319,3 +319,31 @@ TEST(TryLocateSectionsTest, CompressedSectionIsInvalid) {
                  false);
   ASSERT_FALSE(tryLocateSections(_out).has_value());
 }
+
+TEST(TryDecodePrefixTableTest, ValidTable) {
+  FlatBufferBuilder builder;
+  auto entries = builder.CreateVector({CreatePrefixEntry(builder, 'A', 2)});
+  auto prefix_table = CreatePrefixTable(builder, entries);
+  builder.Finish(prefix_table);
+
+  auto possible_table =
+      tryDecodePrefixTable(builder.GetBufferPointer(), builder.GetSize());
+  ASSERT_TRUE(possible_table.has_value());
+  auto table = possible_table.value();
+
+  ASSERT_EQ(table.size(), 1);
+  auto frequency = table.find('A');
+  ASSERT_NE(frequency, table.end());
+  ASSERT_EQ(frequency->second, 2);
+}
+
+TEST(TryDecodePrefixTableTest, InvalidTable) {
+  FlatBufferBuilder builder;
+  auto entries = builder.CreateVector({CreatePrefixEntry(builder, 'A', 2)});
+  auto prefix_table = CreatePrefixTable(builder, entries);
+  builder.Finish(prefix_table);
+
+  auto possible_table =
+      tryDecodePrefixTable(builder.GetBufferPointer(), builder.GetSize() - 4);
+  ASSERT_FALSE(possible_table.has_value());
+}
