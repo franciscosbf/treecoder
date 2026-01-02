@@ -263,6 +263,54 @@ TEST(EncodePrefixTableAndInputTest, DoNotAcceptCodeWithMoreThan8Bits) {
       "entry bits must be truncated to byte size in bits");
 }
 
+TEST(IsInputUntampered, ValidInput) {
+  TreeCoder tc;
+
+  Container in(3);
+  std::memcpy(in.getData(), "AAA", in.getSize());
+
+  auto out = tc.encode(in);
+
+  ASSERT_TRUE(isInputUntampered(out));
+}
+
+TEST(IsInputUntampered, InputIsSmallerThanHashSize) {
+  TreeCoder tc;
+
+  Container in(3);
+  std::memcpy(in.getData(), "AAA", in.getSize());
+
+  auto out = tc.encode(in);
+
+  Container _out(HASH_DIGEST_LENGTH - 3);
+  std::memcpy(_out.getData(), out.getData(), _out.getSize());
+  ASSERT_FALSE(isInputUntampered(_out));
+}
+
+TEST(IsInputUntampered, HashWasForged) {
+  TreeCoder tc;
+
+  Container in(3);
+  std::memcpy(in.getData(), "AAA", in.getSize());
+
+  auto out = tc.encode(in);
+
+  out.getData()[1] = 3;
+  ASSERT_FALSE(isInputUntampered(out));
+}
+
+TEST(IsInputUntampered, EncodedPartWasForged) {
+  TreeCoder tc;
+
+  Container in(3);
+  std::memcpy(in.getData(), "AAA", in.getSize());
+
+  auto out = tc.encode(in);
+
+  out.getData()[HASH_DIGEST_LENGTH + sizeof(std::uint32_t)] = 3;
+  ASSERT_FALSE(isInputUntampered(out));
+}
+
 TEST(EncodeTest, EmptyInput) {
   TreeCoder tc;
   Container in;
