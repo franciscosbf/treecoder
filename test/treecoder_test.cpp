@@ -263,6 +263,15 @@ TEST(EncodePrefixTableAndInputTest, DoNotAcceptCodeWithMoreThan8Bits) {
       "entry bits must be truncated to byte size in bits");
 }
 
+TEST(EncodeTest, EmptyInput) {
+  TreeCoder tc;
+  Container in;
+
+  ASSERT_THAT([&] { tc.encode(in); },
+              Throws<TreeCoderError>(
+                  Property(&TreeCoderError::what, StrEq("file is empty"))));
+}
+
 TEST(IsInputUntampered, ValidInput) {
   TreeCoder tc;
 
@@ -309,15 +318,6 @@ TEST(IsInputUntampered, EncodedPartWasForged) {
 
   out.getData()[HASH_DIGEST_LENGTH + sizeof(std::uint32_t)] = 3;
   ASSERT_FALSE(isInputUntampered(out));
-}
-
-TEST(EncodeTest, EmptyInput) {
-  TreeCoder tc;
-  Container in;
-
-  ASSERT_THAT([&] { tc.encode(in); },
-              Throws<TreeCoderError>(
-                  Property(&TreeCoderError::what, StrEq("file is empty"))));
 }
 
 TEST(TryLocateSectionsTest, ValidSections) {
