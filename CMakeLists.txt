@@ -83,6 +83,7 @@ add_executable(${TREECODER_TEST}
 
 target_link_libraries(${TREECODER_TEST}
   GTest::gtest_main
+  GTest::gmock_main
   flatbuffers
   steinwurf::endian
   OpenSSL::SSL

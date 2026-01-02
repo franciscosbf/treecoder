@@ -71,9 +71,10 @@ struct ComparableHuffmanTree {
   }
 };
 
-std::shared_ptr<HuffmanTree> HuffmanTree::build(
-    const std::unordered_map<std::uint8_t, std::uint32_t> &frequencies) {
-  assert(!frequencies.empty() &&
+std::shared_ptr<HuffmanTree>
+HuffmanTree::build(const std::vector<std::pair<std::uint8_t, std::uint32_t>>
+                       &static_frequencies) {
+  assert(!static_frequencies.empty() &&
          "frequencies table must contain at least one entry");
 
   std::priority_queue<std::shared_ptr<HuffmanTree>,
@@ -81,7 +82,7 @@ std::shared_ptr<HuffmanTree> HuffmanTree::build(
                       ComparableHuffmanTree>
       prioritized_frequencies;
 
-  for (const auto &frequency : frequencies)
+  for (const auto &frequency : static_frequencies)
     prioritized_frequencies.push(
         std::make_shared<HuffmanTree>(frequency.first, frequency.second));
 
@@ -114,6 +115,18 @@ computeFrequencyTable(const Container &in) {
   }
 
   return frequencies;
+}
+
+const std::vector<std::pair<std::uint8_t, std::uint32_t>>
+createStaticFrequencyTable(
+    const std::unordered_map<std::uint8_t, std::uint32_t> &frequencies) {
+  std::vector<std::pair<std::uint8_t, std::uint32_t>> static_frequencies;
+  static_frequencies.reserve(frequencies.size());
+
+  for (const auto &frequency : frequencies)
+    static_frequencies.push_back({frequency.first, frequency.second});
+
+  return static_frequencies;
 }
 
 PrefixCodeEntry::PrefixCodeEntry(std::size_t frequency, std::uint8_t code,
@@ -169,20 +182,21 @@ computePrefixCodeTable(const std::shared_ptr<HuffmanTree> tree) {
 }
 
 Container encodePrefixTableAndInput(
+    const std::vector<std::pair<std::uint8_t, std::uint32_t>>
+        &static_frequencies,
     const std::unordered_map<std::uint8_t, PrefixCodeEntry> &table,
     const Container &in) {
   FlatBufferBuilder builder;
   std::size_t compressed_content_bits_sz = 0;
 
   std::vector<Offset<PrefixEntry>> prefix_entries;
-  for (const auto &entry : table) {
+  for (const auto &frequency : static_frequencies) {
     auto prefix_entry =
-        CreatePrefixEntry(builder, static_cast<std::uint8_t>(entry.first),
-                          entry.second.getFrequency());
+        CreatePrefixEntry(builder, frequency.first, frequency.second);
     prefix_entries.push_back(prefix_entry);
 
-    compressed_content_bits_sz +=
-        entry.second.getFrequency() * entry.second.getBits();
+    auto bits = table.find(frequency.first)->second.getBits();
+    compressed_content_bits_sz += frequency.second * bits;
   }
   auto entries = builder.CreateVector(prefix_entries);
   auto prefix_table = CreatePrefixTable(builder, entries);
@@ -261,7 +275,8 @@ bool isInputUntampered(const Container &in) {
   computeHash(data + HASH_DIGEST_LENGTH, size - HASH_DIGEST_LENGTH,
               got_hash_digest);
 
-  return std::memcmp(got_hash_digest, expected_hash_digest, HASH_DIGEST_LENGTH);
+  return std::memcmp(got_hash_digest, expected_hash_digest,
+                     HASH_DIGEST_LENGTH) == 0;
 }
 
 EncodedSections::EncodedSections(const std::uint8_t *encoded_table,
@@ -315,10 +330,10 @@ std::optional<EncodedSections> tryLocateSections(const Container &in) {
                          compressed_in_sz);
 }
 
-std::optional<std::unordered_map<std::uint8_t, std::uint32_t>>
+std::optional<std::vector<std::pair<std::uint8_t, std::uint32_t>>>
 tryDecodePrefixTable(const std::uint8_t *encoded_table,
                      std::uint32_t encoded_table_sz) {
-  std::unordered_map<std::uint8_t, std::uint32_t> table;
+  std::vector<std::pair<std::uint8_t, std::uint32_t>> table;
 
   Verifier verifier(encoded_table, encoded_table_sz);
   if (!VerifyPrefixTableBuffer(verifier))
@@ -326,13 +341,13 @@ tryDecodePrefixTable(const std::uint8_t *encoded_table,
 
   auto prefix_table = GetPrefixTable(encoded_table);
   for (const auto &prefix_entry : *prefix_table->entries())
-    table.insert({prefix_entry->byte(), prefix_entry->frequency()});
+    table.push_back({prefix_entry->byte(), prefix_entry->frequency()});
 
   return table;
 }
 
 std::uint32_t calcNumberOfCompressedBytes(
-    std::unordered_map<std::uint8_t, std::uint32_t> table) {
+    const std::vector<std::pair<std::uint8_t, std::uint32_t>> &table) {
   std::uint32_t compressed_bytes = 0;
 
   for (auto frequency : table)
@@ -341,18 +356,50 @@ std::uint32_t calcNumberOfCompressedBytes(
   return compressed_bytes;
 }
 
+std::optional<std::uint8_t>
+tryFindByte(const HuffmanNode &node, const std::uint8_t *encoded_compressed_in,
+            std::uint32_t encoded_compressed_in_sz,
+            std::uint32_t compressed_bytes, std::uint32_t &current_byte,
+            std::uint8_t &current_byte_index) {
+  if (current_byte == encoded_compressed_in_sz)
+    return {};
+  else if (node.isLeaf())
+    return node.downcast<HuffmanLeafNode>().getByte();
+  else {
+    auto bit = (encoded_compressed_in[current_byte] >> current_byte_index) & 1;
+    if (current_byte_index == 0) {
+      current_byte_index = N_BYTE_BITS - 1;
+      current_byte++;
+    } else
+      current_byte_index--;
+    auto internal_node = node.downcast<HuffmanInternalNode>();
+    return tryFindByte(bit == 1 ? internal_node.getRightNode()
+                                : internal_node.getLeftNode(),
+                       encoded_compressed_in, encoded_compressed_in_sz,
+                       compressed_bytes, current_byte, current_byte_index);
+  }
+}
+
 std::optional<Container>
 tryDecodeInput(std::uint32_t compressed_bytes,
                const std::shared_ptr<HuffmanTree> tree,
                const std::uint8_t *encoded_compressed_in,
                std::uint32_t encoded_compressed_in_sz) {
-  Container out;
+  auto decompressed = new std::uint8_t[compressed_bytes];
+  const HuffmanNode &root = tree->getRoot();
+  std::uint32_t current_byte = 0;
+  std::uint8_t current_byte_index = N_BYTE_BITS - 1;
 
-  // TODO: implement
-  // - decompress encoded file (recursively?)
-  // WARN: handle case when byte code == bits, i.e., there's only one byte type.
+  for (auto i = 0; i < compressed_bytes; i++) {
+    auto possible_byte =
+        tryFindByte(root, encoded_compressed_in, encoded_compressed_in_sz,
+                    compressed_bytes, current_byte, current_byte_index);
+    if (!possible_byte.has_value())
+      return {};
+    decompressed[i] = possible_byte.value();
+  }
 
-  return out;
+  return Container(decompressed, compressed_bytes);
 }
 
 TreeCoder::TreeCoder() {}
@@ -361,15 +408,16 @@ TreeCoder::~TreeCoder() {}
 
 Container TreeCoder::encode(const Container &in) {
   auto frequencies = computeFrequencyTable(in);
-
   if (frequencies.empty())
     throw TreeCoderError("file is empty");
 
-  auto tree = HuffmanTree::build(frequencies);
+  auto static_frequencies = createStaticFrequencyTable(frequencies);
+
+  auto tree = HuffmanTree::build(static_frequencies);
 
   auto table = computePrefixCodeTable(tree);
 
-  return encodePrefixTableAndInput(table, in);
+  return encodePrefixTableAndInput(static_frequencies, table, in);
 }
 
 Container TreeCoder::decode(const Container &in) {
@@ -401,7 +449,8 @@ Container TreeCoder::decode(const Container &in) {
       compressed_bytes, tree, encoded_sections.getEncodedCompressedInput(),
       encoded_sections.getEncodedCompressedInSize());
   if (!possible_out.has_value())
-    throw TreeCoderError("file contains invalid data in compressed section");
+    throw TreeCoderError("file contains invalid data in compressed section or "
+                         "prefix code table section");
   auto out = possible_out.value();
 
   return out;

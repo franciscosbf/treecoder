@@ -25,6 +25,10 @@ public:
 std::unordered_map<std::uint8_t, std::uint32_t>
 computeFrequencyTable(const Container &in);
 
+const std::vector<std::pair<std::uint8_t, std::uint32_t>>
+createStaticFrequencyTable(
+    const std::unordered_map<std::uint8_t, std::uint32_t> &frequencies);
+
 class HuffmanNode {
 private:
   std::uint32_t weight;
@@ -93,7 +97,8 @@ public:
   const HuffmanNode &getRoot() const;
 
   static std::shared_ptr<HuffmanTree>
-  build(const std::unordered_map<std::uint8_t, std::uint32_t> &frequencies);
+  build(const std::vector<std::pair<std::uint8_t, std::uint32_t>>
+            &static_frequencies);
 };
 
 class PrefixCodeEntry {
@@ -121,6 +126,8 @@ computePrefixCodeTable(const std::shared_ptr<HuffmanTree> tree);
 
 // WARN: assumes that the number of prefixes is equal to the number of in bytes
 Container encodePrefixTableAndInput(
+    const std::vector<std::pair<std::uint8_t, std::uint32_t>>
+        &static_frequencies,
     const std::unordered_map<std::uint8_t, PrefixCodeEntry> &table,
     const Container &in);
 
@@ -150,12 +157,12 @@ public:
 
 std::optional<EncodedSections> tryLocateSections(const Container &in);
 
-std::optional<std::unordered_map<std::uint8_t, std::uint32_t>>
+std::optional<std::vector<std::pair<std::uint8_t, std::uint32_t>>>
 tryDecodePrefixTable(const std::uint8_t *encoded_table,
                      std::uint32_t encoded_table_sz);
 
 std::uint32_t calcNumberOfCompressedBytes(
-    std::unordered_map<std::uint8_t, std::uint32_t> table);
+    const std::vector<std::pair<std::uint8_t, std::uint32_t>> &table);
 
 std::optional<Container>
 tryDecodeInput(std::uint32_t compressed_bytes,

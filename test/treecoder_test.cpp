@@ -1,10 +1,11 @@
 #include <bitset>
 #include <cstdint>
 #include <cstring>
-#include <gtest/gtest.h>
 #include <limits>
 #include <memory>
+#include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "endian/big_endian.hpp"
@@ -12,6 +13,8 @@
 #include "hash.hpp"
 #include "prefixtable_generated.h"
 #include "treecoder.hpp"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 using namespace hash;
 using namespace flatbuffers;
@@ -46,8 +49,8 @@ TEST(FrequencyTableTest, PopulatedTable) {
 }
 
 TEST(HuffmanTreeTest, PopulatedTree) {
-  std::unordered_map<std::uint8_t, std::uint32_t> frequencies = {{'a', 3},
-                                                                 {'b', 1}};
+  std::vector<std::pair<std::uint8_t, std::uint32_t>> frequencies = {{'a', 3},
+                                                                     {'b', 1}};
 
   auto tree = HuffmanTree::build(frequencies);
 
@@ -68,7 +71,7 @@ TEST(HuffmanTreeTest, PopulatedTree) {
 }
 
 TEST(HuffmanTreeTest, OneEntryTree) {
-  std::unordered_map<std::uint8_t, std::uint32_t> frequencies = {{'a', 3}};
+  std::vector<std::pair<std::uint8_t, std::uint32_t>> frequencies = {{'a', 3}};
 
   auto tree = HuffmanTree::build(frequencies);
 
@@ -81,7 +84,7 @@ TEST(HuffmanTreeTest, OneEntryTree) {
 }
 
 TEST(HuffmanTreeTest, DoNotAcceptZeroFrequencies) {
-  std::unordered_map<std::uint8_t, std::uint32_t> frequencies;
+  std::vector<std::pair<std::uint8_t, std::uint32_t>> frequencies;
 
   ASSERT_DEATH(
       { HuffmanTree::build(frequencies); },
@@ -182,6 +185,8 @@ TEST(EncodePrefixTableAndInputTest, PopulatedTable) {
   std::unordered_map<std::uint8_t, PrefixCodeEntry> table = {
       {'A', {3, 0b110, 3}}, {'B', {2, 0b010, 3}}, {'C', {4, 0b00, 2}},
       {'D', {6, 0b10, 2}},  {'E', {2, 0b011, 3}}, {'F', {3, 0b111, 3}}};
+  std::vector<std::pair<std::uint8_t, std::uint32_t>> static_frequencies = {
+      {'A', 3}, {'B', 2}, {'C', 4}, {'D', 6}, {'E', 2}, {'F', 3}};
 
   Container in(reinterpret_cast<std::uint8_t *>(
                    const_cast<char *>("AAABCCBCCDDDEEFDDFDF")),
@@ -193,7 +198,7 @@ TEST(EncodePrefixTableAndInputTest, PopulatedTable) {
 
   std::uint8_t expected_out_hash[HASH_DIGEST_LENGTH];
 
-  auto out = encodePrefixTableAndInput(table, in);
+  auto out = encodePrefixTableAndInput(static_frequencies, table, in);
 
   std::uint32_t encoded_table_sz;
   std::uint32_t encoded_compressed_in_sz;
@@ -247,12 +252,14 @@ TEST(EncodePrefixTableAndInputTest, PopulatedTable) {
 TEST(EncodePrefixTableAndInputTest, DoNotAcceptCodeWithMoreThan8Bits) {
   std::unordered_map<std::uint8_t, PrefixCodeEntry> table = {
       {'A', {3, 0b110, 9}}};
+  std::vector<std::pair<std::uint8_t, std::uint32_t>> static_frequencies = {
+      {'A', 3}};
 
   Container in(reinterpret_cast<std::uint8_t *>(const_cast<char *>("AAA")), 3,
                false);
 
   ASSERT_DEATH(
-      { encodePrefixTableAndInput(table, in); },
+      { encodePrefixTableAndInput(static_frequencies, table, in); },
       "entry bits must be truncated to byte size in bits");
 }
 
@@ -332,9 +339,9 @@ TEST(TryDecodePrefixTableTest, ValidTable) {
   auto table = possible_table.value();
 
   ASSERT_EQ(table.size(), 1);
-  auto frequency = table.find('A');
-  ASSERT_NE(frequency, table.end());
-  ASSERT_EQ(frequency->second, 2);
+  auto frequency = table[0];
+  ASSERT_EQ(frequency.first, 'A');
+  ASSERT_EQ(frequency.second, 2);
 }
 
 TEST(TryDecodePrefixTableTest, InvalidTable) {
@@ -349,13 +356,74 @@ TEST(TryDecodePrefixTableTest, InvalidTable) {
 }
 
 TEST(CalcNumberOfCompressedBytes, PopulatedTable) {
-  std::unordered_map<std::uint8_t, std::uint32_t> table = {{'A', 3}, {'B', 4}};
+  std::vector<std::pair<std::uint8_t, std::uint32_t>> table = {{'A', 3},
+                                                               {'B', 4}};
 
   ASSERT_EQ(calcNumberOfCompressedBytes(table), 7);
 }
 
 TEST(CalcNumberOfCompressedBytes, EmptyTable) {
-  std::unordered_map<std::uint8_t, std::uint32_t> table;
+  std::vector<std::pair<std::uint8_t, std::uint32_t>> table;
 
   ASSERT_EQ(calcNumberOfCompressedBytes(table), 0);
+}
+
+TEST(TryFindByteTest, ValidCompression) {
+  std::uint8_t compressed[] = {0b01010111, 0b10000000};
+
+#define JOIN(L, R) std::make_shared<HuffmanTree>(L, R)
+#define LEAF(B, W) std::make_shared<HuffmanTree>(B, W)
+
+  std::shared_ptr<HuffmanTree> tree =
+      JOIN(LEAF('C', 1), JOIN(LEAF('B', 2), LEAF('A', 2)));
+
+#undef JOIN
+#undef LEAF
+
+  auto possible_out = tryDecodeInput(5, tree, compressed, 2);
+  ASSERT_TRUE(possible_out.has_value());
+  auto out = possible_out.value();
+
+  auto got_decoded =
+      std::string(reinterpret_cast<const char *>(out.getData()), out.getSize());
+  ASSERT_THAT(got_decoded, StrEq("CBBAA"));
+}
+
+TEST(TryFindByteTest, ValidCompressionWithOnlyOneByteType) {
+  std::uint8_t compressed[] = {0b01010111};
+
+#define JOIN(L, R) std::make_shared<HuffmanTree>(L, R)
+#define LEAF(B, W) std::make_shared<HuffmanTree>(B, W)
+
+  std::shared_ptr<HuffmanTree> tree = LEAF('C', 3);
+
+#undef JOIN
+#undef LEAF
+
+  auto possible_out = tryDecodeInput(3, tree, compressed, 1);
+  ASSERT_TRUE(possible_out.has_value());
+  auto out = possible_out.value();
+
+  auto got_decoded =
+      std::string(reinterpret_cast<const char *>(out.getData()), out.getSize());
+  ASSERT_THAT(got_decoded, StrEq("CCC"));
+}
+
+TEST(DecodeTest, ValidCompressedInput) {
+  TreeCoder tc;
+
+  auto expected_uncompressed = "ABBC DD @@";
+  Container in(reinterpret_cast<std::uint8_t *>(
+                   const_cast<char *>(expected_uncompressed)),
+               10, false);
+
+  Container out;
+  {
+    Container compressed = tc.encode(in);
+    out = tc.decode(compressed);
+  }
+
+  auto got_uncompressed =
+      std::string(reinterpret_cast<const char *>(out.getData()), out.getSize());
+  ASSERT_THAT(got_uncompressed, expected_uncompressed);
 }
