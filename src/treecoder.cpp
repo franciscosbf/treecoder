@@ -343,6 +343,8 @@ tryDecodePrefixTable(const std::uint8_t *encoded_table,
   auto prefix_table = GetPrefixTable(encoded_table);
   for (const auto &prefix_entry : *prefix_table->entries())
     table.push_back({prefix_entry->byte(), prefix_entry->frequency()});
+  if (table.empty())
+    return {};
 
   return table;
 }
@@ -427,7 +429,7 @@ Container TreeCoder::decode(const Container &in) {
     throw TreeCoderError("file is empty");
 
   if (!isInputUntampered(in))
-    throw TreeCoderError("encoded file was altered");
+    throw TreeCoderError("unrecognizable encoded file");
 
   auto possible_encoded_sections = tryLocateSections(in);
   if (!possible_encoded_sections.has_value())
@@ -441,8 +443,6 @@ Container TreeCoder::decode(const Container &in) {
     throw TreeCoderError(
         "file contains invalid data in prefix code table section");
   auto table = possible_table.value();
-  if (table.empty())
-    throw TreeCoderError("file contains empty prefix code table");
 
   auto compressed_bytes = calcNumberOfCompressedBytes(table);
   auto tree = HuffmanTree::build(table);

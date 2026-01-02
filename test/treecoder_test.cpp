@@ -477,3 +477,90 @@ TEST(DecodeTest, ValidCompressedInput) {
       std::string(reinterpret_cast<char *>(out.getData()), out.getSize());
   ASSERT_THAT(got_uncompressed, expected_uncompressed);
 }
+
+TEST(DecodeTest, EmptyInput) {
+  TreeCoder tc;
+  Container in;
+
+  ASSERT_THAT([&] { tc.decode(in); },
+              Throws<TreeCoderError>(
+                  Property(&TreeCoderError::what, StrEq("file is empty"))));
+}
+
+TEST(DecodeTest, InputWasForged) {
+  TreeCoder tc;
+
+  Container in(10);
+  std::memcpy(in.getData(), "ABBC DD @@", in.getSize());
+
+  Container out = tc.encode(in);
+
+  out.getData()[1] = 2;
+  ASSERT_THAT(
+      [&] { tc.decode(out); },
+      Throws<TreeCoderError>(Property(&TreeCoderError::what,
+                                      StrEq("unrecognizable encoded file"))));
+}
+
+TEST(DecodeTest, InputWithInvalidSections) {
+  TreeCoder tc;
+
+  Container in(10);
+  std::memcpy(in.getData(), "ABBC DD @@", in.getSize());
+
+  Container out = tc.encode(in);
+
+  out.getData()[HASH_DIGEST_LENGTH] = 255;
+  computeHash(
+      out.getData() + HASH_DIGEST_LENGTH, out.getSize() - HASH_DIGEST_LENGTH,
+      reinterpret_cast<std::uint8_t (&)[HASH_DIGEST_LENGTH]>(*out.getData()));
+  ASSERT_THAT([&] { tc.decode(out); },
+              Throws<TreeCoderError>(Property(
+                  &TreeCoderError::what,
+                  StrEq("unable to locate encoded file content sections"))));
+}
+
+TEST(DecodeTest, InputWithInvalidPrefixTable) {
+  TreeCoder tc;
+
+  Container in(10);
+  std::memcpy(in.getData(), "ABBC DD @@", in.getSize());
+
+  Container out = tc.encode(in);
+
+  out.getData()[HASH_DIGEST_LENGTH + sizeof(std::uint32_t)] = 255;
+  computeHash(
+      out.getData() + HASH_DIGEST_LENGTH, out.getSize() - HASH_DIGEST_LENGTH,
+      reinterpret_cast<std::uint8_t (&)[HASH_DIGEST_LENGTH]>(*out.getData()));
+  ASSERT_THAT(
+      [&] { tc.decode(out); },
+      Throws<TreeCoderError>(Property(
+          &TreeCoderError::what,
+          StrEq("file contains invalid data in prefix code table section"))));
+}
+
+TEST(DecodeTest, InputWithInvalidCompressedContent) {
+  TreeCoder tc;
+
+  Container in(10);
+  std::memcpy(in.getData(), "ABBC DD @@", in.getSize());
+
+  Container out = tc.encode(in);
+
+  auto sections = tryLocateSections(out).value();
+  auto encoded_compressed_in_sz =
+      sections.getEncodedCompressedInput() - sizeof(std::uint32_t);
+  auto compressed_in_sz = sections.getEncodedCompressedInSize() - 1;
+  big_endian::put<std::uint32_t>(
+      compressed_in_sz, const_cast<std::uint8_t *>(encoded_compressed_in_sz));
+  Container _out(out.getSize() - 1);
+  std::memcpy(_out.getData(), out.getData(), _out.getSize());
+  computeHash(
+      _out.getData() + HASH_DIGEST_LENGTH, _out.getSize() - HASH_DIGEST_LENGTH,
+      reinterpret_cast<std::uint8_t (&)[HASH_DIGEST_LENGTH]>(*_out.getData()));
+  ASSERT_THAT([&] { tc.decode(_out); },
+              Throws<TreeCoderError>(Property(
+                  &TreeCoderError::what,
+                  StrEq("file contains invalid data in compressed section or "
+                        "prefix code table section"))));
+}
