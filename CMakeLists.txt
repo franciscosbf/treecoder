@@ -53,6 +53,7 @@ add_executable(${PROJECT_NAME}
   src/treecoder.cpp
   src/file.cpp
   src/hash.cpp
+  src/container.cpp
 )
 
 target_compile_options(${PROJECT_NAME}
@@ -79,6 +80,7 @@ add_executable(${TREECODER_TEST}
   src/treecoder.cpp
   src/file.cpp
   src/hash.cpp
+  src/container.cpp
 )
 
 target_link_libraries(${TREECODER_TEST}

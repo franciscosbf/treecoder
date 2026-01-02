@@ -4,8 +4,8 @@
 #include <memory>
 #include <queue>
 
+#include "container.hpp"
 #include "endian/big_endian.hpp"
-#include "file.hpp"
 #include "hash.hpp"
 #include "prefixtable_generated.h"
 #include "treecoder.hpp"
@@ -211,7 +211,8 @@ Container encodePrefixTableAndInput(
   std::uint32_t out_sz = HASH_DIGEST_LENGTH + sizeof table_buff_sz +
                          sizeof compressed_in_sz + table_buff_sz +
                          compressed_in_sz;
-  auto out_data = new std::uint8_t[out_sz];
+  Container out(out_sz);
+  auto out_data = out.getData();
 
   auto encoded_table_sz = out_data + HASH_DIGEST_LENGTH;
   big_endian::put<std::uint32_t>(table_buff_sz, encoded_table_sz);
@@ -260,7 +261,7 @@ Container encodePrefixTableAndInput(
       out_data + HASH_DIGEST_LENGTH, out_sz - HASH_DIGEST_LENGTH,
       reinterpret_cast<std::uint8_t (&)[HASH_DIGEST_LENGTH]>(*hash_digest));
 
-  return Container(out_data, out_sz);
+  return out;
 }
 
 bool isInputUntampered(const Container &in) {
@@ -385,7 +386,8 @@ tryDecodeInput(std::uint32_t compressed_bytes,
                const std::shared_ptr<HuffmanTree> tree,
                const std::uint8_t *encoded_compressed_in,
                std::uint32_t encoded_compressed_in_sz) {
-  auto decompressed = new std::uint8_t[compressed_bytes];
+  Container out(compressed_bytes);
+  auto out_data = out.getData();
   const HuffmanNode &root = tree->getRoot();
   std::uint32_t current_byte = 0;
   std::uint8_t current_byte_index = N_BYTE_BITS - 1;
@@ -396,10 +398,10 @@ tryDecodeInput(std::uint32_t compressed_bytes,
                     compressed_bytes, current_byte, current_byte_index);
     if (!possible_byte.has_value())
       return {};
-    decompressed[i] = possible_byte.value();
+    out_data[i] = possible_byte.value();
   }
 
-  return Container(decompressed, compressed_bytes);
+  return out;
 }
 
 TreeCoder::TreeCoder() {}

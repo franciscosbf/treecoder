@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include "container.hpp"
 #include "endian/big_endian.hpp"
-#include "file.hpp"
 #include "hash.hpp"
 #include "prefixtable_generated.h"
 #include "treecoder.hpp"
@@ -17,6 +17,7 @@
 #include "gtest/gtest.h"
 
 using namespace hash;
+using namespace container;
 using namespace flatbuffers;
 using namespace testing;
 using namespace treecoder;
@@ -32,8 +33,8 @@ TEST(FrequencyTableTest, EmptyTable) {
 }
 
 TEST(FrequencyTableTest, PopulatedTable) {
-  Container in(reinterpret_cast<std::uint8_t *>(const_cast<char *>("aaba")), 4,
-               false);
+  Container in(4);
+  std::memcpy(in.getData(), "aaba", in.getSize());
 
   auto frequencies = computeFrequencyTable(in);
 
@@ -188,9 +189,8 @@ TEST(EncodePrefixTableAndInputTest, PopulatedTable) {
   std::vector<std::pair<std::uint8_t, std::uint32_t>> static_frequencies = {
       {'A', 3}, {'B', 2}, {'C', 4}, {'D', 6}, {'E', 2}, {'F', 3}};
 
-  Container in(reinterpret_cast<std::uint8_t *>(
-                   const_cast<char *>("AAABCCBCCDDDEEFDDFDF")),
-               20, false);
+  Container in(20);
+  std::memcpy(in.getData(), "AAABCCBCCDDDEEFDDFDF", in.getSize());
 
   std::vector<std::uint8_t> expected_compressed_out = {
       0b11011011, 0b00100000, 0b01000001, 0b01010011,
@@ -255,8 +255,8 @@ TEST(EncodePrefixTableAndInputTest, DoNotAcceptCodeWithMoreThan8Bits) {
   std::vector<std::pair<std::uint8_t, std::uint32_t>> static_frequencies = {
       {'A', 3}};
 
-  Container in(reinterpret_cast<std::uint8_t *>(const_cast<char *>("AAA")), 3,
-               false);
+  Container in(3);
+  std::memcpy(in.getData(), "AAA", in.getSize());
 
   ASSERT_DEATH(
       { encodePrefixTableAndInput(static_frequencies, table, in); },
@@ -273,8 +273,8 @@ TEST(EncodeTest, EmptyInput) {
 TEST(TryLocateSectionsTest, ValidSections) {
   TreeCoder tc;
 
-  Container in(reinterpret_cast<std::uint8_t *>(const_cast<char *>("AAA")), 3,
-               false);
+  Container in(3);
+  std::memcpy(in.getData(), "AAA", in.getSize());
 
   auto out = tc.encode(in);
 
@@ -292,38 +292,39 @@ TEST(TryLocateSectionsTest, ValidSections) {
 TEST(TryLocateSectionsTest, TableSizeDoNotExist) {
   TreeCoder tc;
 
-  Container in(reinterpret_cast<std::uint8_t *>(const_cast<char *>("AAA")), 3,
-               false);
+  Container in(3);
+  std::memcpy(in.getData(), "AAA", in.getSize());
 
   auto out = tc.encode(in);
 
-  Container _out(const_cast<std::uint8_t *>(out.getData()), 4, false);
+  Container _out(4);
+  std::memcpy(_out.getData(), out.getData(), _out.getSize());
   ASSERT_FALSE(tryLocateSections(_out).has_value());
 }
 
 TEST(TryLocateSectionsTest, TableSectionIsInvalid) {
   TreeCoder tc;
 
-  Container in(reinterpret_cast<std::uint8_t *>(const_cast<char *>("AAA")), 3,
-               false);
+  Container in(3);
+  std::memcpy(in.getData(), "AAA", in.getSize());
 
   auto out = tc.encode(in);
 
-  Container _out(const_cast<std::uint8_t *>(out.getData()),
-                 HASH_DIGEST_LENGTH + sizeof(std::uint32_t) + 4, false);
+  Container _out(HASH_DIGEST_LENGTH + sizeof(std::uint32_t) + 4);
+  std::memcpy(_out.getData(), out.getData(), _out.getSize());
   ASSERT_FALSE(tryLocateSections(_out).has_value());
 }
 
 TEST(TryLocateSectionsTest, CompressedSectionIsInvalid) {
   TreeCoder tc;
 
-  Container in(reinterpret_cast<std::uint8_t *>(const_cast<char *>("AAA")), 3,
-               false);
+  Container in(3);
+  std::memcpy(in.getData(), "AAA", in.getSize());
 
   auto out = tc.encode(in);
 
-  Container _out(const_cast<std::uint8_t *>(out.getData()), out.getSize() - 1,
-                 false);
+  Container _out(out.getSize() - 1);
+  std::memcpy(_out.getData(), out.getData(), _out.getSize());
   ASSERT_FALSE(tryLocateSections(_out).has_value());
 }
 
@@ -413,9 +414,8 @@ TEST(DecodeTest, ValidCompressedInput) {
   TreeCoder tc;
 
   auto expected_uncompressed = "ABBC DD @@";
-  Container in(reinterpret_cast<std::uint8_t *>(
-                   const_cast<char *>(expected_uncompressed)),
-               10, false);
+  Container in(10);
+  std::memcpy(in.getData(), expected_uncompressed, in.getSize());
 
   Container out;
   {
