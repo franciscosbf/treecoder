@@ -434,7 +434,7 @@ TEST(TryFindByteTest, ValidCompression) {
   auto out = possible_out.value();
 
   auto got_decoded =
-      std::string(reinterpret_cast<const char *>(out.getData()), out.getSize());
+      std::string(reinterpret_cast<char *>(out.getData()), out.getSize());
   ASSERT_THAT(got_decoded, StrEq("CBBAA"));
 }
 
@@ -454,7 +454,7 @@ TEST(TryFindByteTest, ValidCompressionWithOnlyOneByteType) {
   auto out = possible_out.value();
 
   auto got_decoded =
-      std::string(reinterpret_cast<const char *>(out.getData()), out.getSize());
+      std::string(reinterpret_cast<char *>(out.getData()), out.getSize());
   ASSERT_THAT(got_decoded, StrEq("CCC"));
 }
 
@@ -472,6 +472,6 @@ TEST(DecodeTest, ValidCompressedInput) {
   }
 
   auto got_uncompressed =
-      std::string(reinterpret_cast<const char *>(out.getData()), out.getSize());
+      std::string(reinterpret_cast<char *>(out.getData()), out.getSize());
   ASSERT_THAT(got_uncompressed, expected_uncompressed);
 }
