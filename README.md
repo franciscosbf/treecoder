@@ -37,7 +37,8 @@ As far as I known, there aren't any shenanigans. I have empiric guarantees that 
 #### Compiling Everything
 
 ```text
-cmake -B build && cmake --build build
+# e.g., Build type set to Release
+cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
 ```
 
 The resulting `build` folder will contain `treecoder` (program) and `treecoder_test` (tests).
