@@ -10,14 +10,14 @@
 #include "prefixtable_generated.h"
 #include "treecoder.hpp"
 
-constexpr std::uint32_t N_BYTE_BITS = std::numeric_limits<std::uint8_t>::digits;
-
 using namespace hash;
 using namespace endian;
 using namespace flatbuffers;
 using namespace prefixtable;
 
 namespace treecoder {
+constexpr std::uint32_t N_BYTE_BITS = std::numeric_limits<std::uint8_t>::digits;
+
 TreeCoderError::TreeCoderError(std::string reason) : reason(reason) {}
 
 const char *TreeCoderError::what() const noexcept { return reason.c_str(); }

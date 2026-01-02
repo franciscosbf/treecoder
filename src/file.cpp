@@ -5,17 +5,17 @@
 namespace file {
 Container::Container() : data(nullptr), size(0) {}
 
+void doNotDelete(std::uint8_t *data) {}
+
 Container::Container(std::uint8_t *data, std::uint32_t size, bool free)
-    : data(data), size(size), free(free) {}
-
-Container::~Container() {
-  if (data == nullptr || !free)
-    return;
-
-  delete[] data;
+    : size(size) {
+  this->data = free ? std::shared_ptr<std::uint8_t>(data)
+                    : std::shared_ptr<std::uint8_t>(data, doNotDelete);
 }
 
-const std::uint8_t *Container::getData() const { return data; }
+Container::~Container() {}
+
+const std::uint8_t *Container::getData() const { return data.get(); }
 
 std::uint32_t Container::getSize() const { return size; }
 
