@@ -315,7 +315,9 @@ TEST(EncodeTest, EmptyInput) {
   TreeCoder tc;
   Container in;
 
-  ASSERT_THROW({ tc.encode(in); }, TreeCoderError);
+  ASSERT_THAT([&] { tc.encode(in); },
+              Throws<TreeCoderError>(
+                  Property(&TreeCoderError::what, StrEq("file is empty"))));
 }
 
 TEST(TryLocateSectionsTest, ValidSections) {
