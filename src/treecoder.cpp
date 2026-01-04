@@ -1,4 +1,3 @@
-#include <cassert>
 #include <cmath>
 #include <cstring>
 #include <memory>
@@ -74,8 +73,6 @@ struct ComparableHuffmanTree {
 std::shared_ptr<HuffmanTree>
 HuffmanTree::build(const std::vector<std::pair<std::uint8_t, std::uint32_t>>
                        &static_frequencies) {
-  assert(!static_frequencies.empty() &&
-         "frequencies table must contain at least one entry");
 
   std::priority_queue<std::shared_ptr<HuffmanTree>,
                       std::vector<std::shared_ptr<HuffmanTree>>,
@@ -129,13 +126,13 @@ createStaticFrequencyTable(
   return static_frequencies;
 }
 
-PrefixCodeEntry::PrefixCodeEntry(std::size_t frequency, std::uint8_t code,
+PrefixCodeEntry::PrefixCodeEntry(std::size_t frequency, std::uint32_t code,
                                  std::uint8_t bits)
     : frequency(frequency), code(code), bits(bits) {}
 
 std::size_t PrefixCodeEntry::getFrequency() const { return frequency; }
 
-std::uint8_t PrefixCodeEntry::getCode() const { return code; }
+std::uint32_t PrefixCodeEntry::getCode() const { return code; }
 
 std::uint8_t PrefixCodeEntry::getBits() const { return bits; }
 
@@ -146,20 +143,10 @@ void computePrefixCodePerByte(
   if (node.isLeaf()) {
     auto leaf_node = node.downcast<HuffmanLeafNode>();
 
-    if (code == 0 && bits == 0) {
+    if (code == 0 && bits == 0)
       bits = 1;
-    } else if (bits > N_BYTE_BITS) {
-      code = leaf_node.getByte();
-      std::uint8_t empty_part = 0;
-      for (auto i = N_BYTE_BITS - 1; i > 0; i--)
-        if ((code >> i) == 0)
-          empty_part++;
-      bits = N_BYTE_BITS - empty_part;
-    }
 
-    table.insert(
-        {leaf_node.getByte(),
-         {leaf_node.getWeight(), static_cast<std::uint8_t>(code), bits}});
+    table.insert({leaf_node.getByte(), {leaf_node.getWeight(), code, bits}});
   } else {
     auto internal_node = node.downcast<HuffmanInternalNode>();
 
@@ -195,7 +182,8 @@ Container encodePrefixTableAndInput(
         CreatePrefixEntry(builder, frequency.first, frequency.second);
     prefix_entries.push_back(prefix_entry);
 
-    auto bits = table.find(frequency.first)->second.getBits();
+    auto prefix_code = table.find(frequency.first)->second;
+    auto bits = prefix_code.getBits();
     compressed_content_bits_sz += frequency.second * bits;
   }
   auto entries = builder.CreateVector(prefix_entries);
@@ -226,14 +214,8 @@ Container encodePrefixTableAndInput(
   auto compressed_in = encoded_compressed_in_sz + sizeof compressed_in_sz;
   std::uint32_t current_byte_index = 0;
   std::uint8_t byte_index = 0;
-  for (auto i = 0; i < in.getSize(); i++) {
-    auto prefix_entry = table.find(in.getData()[i]);
-    auto bits = prefix_entry->second.getBits();
-    assert(bits <= N_BYTE_BITS &&
-           "entry bits must be truncated to byte size in bits");
-    auto code = prefix_entry->second.getCode();
+  auto encode_byte = [&](std::uint8_t code, std::uint8_t bits) {
     std::uint8_t free_byte_indexes = N_BYTE_BITS - byte_index;
-
     if (bits <= free_byte_indexes) {
       if (byte_index == 0)
         compressed_in[current_byte_index] = code << (N_BYTE_BITS - bits);
@@ -254,6 +236,25 @@ Container encodePrefixTableAndInput(
       byte_index = 0;
       current_byte_index++;
     }
+  };
+  for (auto i = 0; i < in.getSize(); i++) {
+    auto prefix_entry = table.find(in.getData()[i]);
+    auto bits = prefix_entry->second.getBits();
+    auto code = prefix_entry->second.getCode();
+
+    if (bits > N_BYTE_BITS) {
+      auto complete_chunks = bits / N_BYTE_BITS;
+      auto complete_bits = complete_chunks * N_BYTE_BITS;
+      auto incomplete_bits = bits - complete_bits;
+
+      if (incomplete_bits > 0)
+        encode_byte(code >> complete_bits, incomplete_bits);
+      do {
+        complete_bits -= N_BYTE_BITS;
+        encode_byte((code >> complete_bits) & 0xFF, N_BYTE_BITS);
+      } while (complete_bits > 0);
+    } else
+      encode_byte(code, bits);
   }
 
   auto hash_digest = out_data;

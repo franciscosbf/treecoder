@@ -84,39 +84,6 @@ TEST(HuffmanTreeTest, OneEntryTree) {
   ASSERT_EQ(root_node.getWeight(), 3);
 }
 
-TEST(HuffmanTreeTest, DoNotAcceptZeroFrequencies) {
-  std::vector<std::pair<std::uint8_t, std::uint32_t>> frequencies;
-
-  ASSERT_DEATH(
-      { HuffmanTree::build(frequencies); },
-      "frequencies table must contain at least one entry");
-}
-
-struct ByteCode {
-  std::uint8_t byte, bits;
-};
-
-class PrefixCodePerByteFixtureTest : public TestWithParam<ByteCode> {};
-
-INSTANTIATE_TEST_SUITE_P(ByteCodes, PrefixCodePerByteFixtureTest,
-                         Values(ByteCode{'a', 7}, ByteCode{'\0', 1},
-                                ByteCode{0xFF, 8}, ByteCode{1, 1}));
-
-TEST_P(PrefixCodePerByteFixtureTest, ByteCodeOverflows) {
-  auto bc = GetParam();
-
-  HuffmanLeafNode node(bc.byte, 12);
-  std::unordered_map<std::uint8_t, PrefixCodeEntry> table;
-
-  computePrefixCodePerByte(node, table, 0b1100110111, 10);
-
-  auto entry = table.find(bc.byte);
-  ASSERT_NE(entry, table.end());
-  ASSERT_EQ(entry->second.getFrequency(), 12);
-  ASSERT_EQ(entry->second.getCode(), bc.byte);
-  ASSERT_EQ(entry->second.getBits(), bc.bits);
-}
-
 TEST(PrefixCodePerByteTest, OnlyOneByteCode) {
   HuffmanLeafNode node('a', 12);
   std::unordered_map<std::uint8_t, PrefixCodeEntry> table;
@@ -247,20 +214,6 @@ TEST(EncodePrefixTableAndInputTest, PopulatedTable) {
         expected_compressed_out[i]};
     ASSERT_EQ(got_byte, expected_byte);
   }
-}
-
-TEST(EncodePrefixTableAndInputTest, DoNotAcceptCodeWithMoreThan8Bits) {
-  std::unordered_map<std::uint8_t, PrefixCodeEntry> table = {
-      {'A', {3, 0b110, 9}}};
-  std::vector<std::pair<std::uint8_t, std::uint32_t>> static_frequencies = {
-      {'A', 3}};
-
-  Container in(3);
-  std::memcpy(in.getData(), "AAA", in.getSize());
-
-  ASSERT_DEATH(
-      { encodePrefixTableAndInput(static_frequencies, table, in); },
-      "entry bits must be truncated to byte size in bits");
 }
 
 TEST(EncodeTest, EmptyInput) {

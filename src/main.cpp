@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
   std::function<void()> treecode;
 
   if (to_decode) {
-    ofilename = ifilename.substr(ifilename.size() - HUFFMAN_SUFFIX.size());
+    ofilename = ifilename.substr(0, ifilename.size() - HUFFMAN_SUFFIX.size());
 
     treecode = [&]() { out = tc.decode(in); };
   } else {

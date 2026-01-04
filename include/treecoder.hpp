@@ -105,14 +105,14 @@ public:
 class PrefixCodeEntry {
 private:
   std::size_t frequency;
-  std::uint8_t code, bits;
+  std::uint32_t code, bits;
 
 public:
-  PrefixCodeEntry(std::size_t frequency, std::uint8_t code, std::uint8_t bits);
+  PrefixCodeEntry(std::size_t frequency, std::uint32_t code, std::uint8_t bits);
 
   std::size_t getFrequency() const;
 
-  std::uint8_t getCode() const;
+  std::uint32_t getCode() const;
 
   std::uint8_t getBits() const;
 };
