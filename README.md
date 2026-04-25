@@ -34,6 +34,22 @@ treecoder file.hff
 
 As far as I known, there aren't any shenanigans. I have empiric guarantees that this compiles on x86-64 and arm64 (apple silicon chip), so we good!
 
+#### External Dependencies
+
+Besides most dependencies being fetched directly, treecoder requires [OpenSSL](https://www.openssl.org/) installed and the [endian](https://github.com/steinwurf/endian) submodule. The latter can be configured simply by executing:
+
+```sh
+git submodule init && git submodule update
+```
+
+Regarding OpenSSL, e.g., Ubuntu doesn't come with the development package. Therefore, you would need to:
+
+```sh
+sudo apt update && sudo apt install openssl-dev
+```
+
+This is just to say that not all operating systems include the development library by default.
+
 #### Compiling Everything
 
 ```text
